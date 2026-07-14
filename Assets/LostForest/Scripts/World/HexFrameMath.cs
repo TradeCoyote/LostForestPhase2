@@ -56,5 +56,12 @@ namespace LostForest.Phase2.World
             float z = Mathf.Sqrt(3f) * outerRadiusMeters * (row + 0.5f * (column & 1));
             return new Vector3(x, 0f, z);
         }
+
+        public static Vector3 GetFlatTopHexCenterFromAxial(Vector2Int axial, float outerRadiusMeters)
+        {
+            float x = outerRadiusMeters * 1.5f * axial.x;
+            float z = Mathf.Sqrt(3f) * outerRadiusMeters * (axial.y + axial.x * 0.5f);
+            return new Vector3(x, 0f, z);
+        }
     }
 }
