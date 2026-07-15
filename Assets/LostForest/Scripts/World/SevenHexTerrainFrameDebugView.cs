@@ -70,6 +70,23 @@ namespace LostForest.Phase2.World
         public TerrainFrameData TerrainFrameData => terrainFrameData;
         public IReadOnlyDictionary<string, SharedHeightPoint> SharedPoints => terrainFrameData == null ? EmptySharedPoints : terrainFrameData.SharedPoints;
 
+        public void ApplyEarlyWalkThruVisualDefaults()
+        {
+            showTerrainSurface = true;
+            addTerrainMeshColliders = true;
+
+            showCenters = true;
+            showVertices = true;
+            showEdgeMidpoints = true;
+            showInnerPoints = true;
+            showHexOutlines = true;
+            showInteriorLines = true;
+
+            showCenterLabels = false;
+            showPointLabels = false;
+            showConformingTileAnchors = false;
+        }
+
         private void Start()
         {
             if (Application.isPlaying)

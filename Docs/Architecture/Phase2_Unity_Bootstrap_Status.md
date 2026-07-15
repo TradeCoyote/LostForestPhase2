@@ -197,11 +197,47 @@ To test collision readiness:
 
 This is still terrain/frame infrastructure only. It does not add player movement, visible board collision, Tile-authored collision, or tile-rotation-driven terrain behavior.
 
+## Early WalkThru Test
+
+Added the first minimal first-person walk-test path for proving terrain/collider traversal over the generated 7-hex terrain slice.
+
+Source:
+
+- `Assets/LostForest/Scripts/Player/EarlyWalkThruFirstPersonController.cs`
+- `Assets/LostForest/Scripts/Player/EarlyWalkThruCenterSpawn.cs`
+- `Assets/LostForest/Scripts/Player/EarlyWalkThruPositionLogger.cs`
+- `Assets/LostForest/Scripts/Editor/EarlyWalkThruTestSceneBootstrap.cs`
+
+Use `Lost Forest > Bootstrap > Create or Repair Early WalkThru Test Scene` to create or repair:
+
+- `Assets/LostForest/Scenes/Phase2_EarlyWalkThruTest.unity`
+
+Default behavior:
+
+- Reuses the Frame-owned 7-hex terrain generation stack.
+- Keeps terrain MeshColliders enabled.
+- Spawns the player just above a selected Slot center point, defaulting to the center Slot.
+- Does not spawn on shared or unshared hex edges.
+- Uses keyboard WASD movement and mouse look only.
+- Logs current player XYZ position to the Unity Console.
+- Keeps hex points and construction lines visible for this test.
+- Hides center labels, point labels, and the orange Tile conformity proof by default.
+- Adds no runes, stamina, chill, pursuer behavior, landmarks, or player-facing board UI.
+
+Manual verification:
+
+1. Use `Lost Forest > Bootstrap > Create or Repair Early WalkThru Test Scene`.
+2. Press Play.
+3. Confirm the Console logs the spawn XYZ and recurring player XYZ positions.
+4. Move with WASD and look with the mouse.
+5. Walk from the center hex toward neighboring hexes and test seam crossings.
+6. Confirm the player lands on terrain collision instead of falling through.
+
 ## Scope Held Back
 
 The bootstrap intentionally does not include:
 
-- Player movement.
+- Final player movement.
 - 3D chunks.
 - Full 26 x 26 runtime terrain generation.
 - Runes.
