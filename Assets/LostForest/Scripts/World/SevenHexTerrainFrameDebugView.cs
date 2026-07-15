@@ -9,6 +9,7 @@ namespace LostForest.Phase2.World
     public sealed class SevenHexTerrainFrameDebugView : MonoBehaviour
     {
         private const float SqrtThree = 1.7320508f;
+        private static readonly IReadOnlyDictionary<string, SharedHeightPoint> EmptySharedPoints = new Dictionary<string, SharedHeightPoint>();
 
         [Header("Scale")]
         [SerializeField] private float hexFlatToFlatMeters = 100f;
@@ -17,6 +18,8 @@ namespace LostForest.Phase2.World
         [SerializeField] private bool showTerrainSurface = true;
         [SerializeField] private Color terrainSurfaceColor = new Color(0.92f, 0.96f, 1f, 1f);
         [SerializeField] private float terrainSurfaceLift = -0.08f;
+        [SerializeField] private bool addTerrainMeshColliders = true;
+        [SerializeField] private bool markTerrainSurfaceStatic = false;
 
         [Header("Points")]
         [SerializeField] private int heightSeed = 4242;
@@ -59,13 +62,13 @@ namespace LostForest.Phase2.World
         [SerializeField] private Color innerPointColor = new Color(0.86f, 0.48f, 1f, 1f);
         [SerializeField] private Color conformingTileAnchorColor = new Color(1f, 0.62f, 0.08f, 1f);
 
-        private readonly Dictionary<string, SharedHeightPoint> sharedPoints = new Dictionary<string, SharedHeightPoint>();
-        private int localPointReferenceCount;
-        private int reusedPointReferenceCount;
+        private TerrainFrameData terrainFrameData;
+        private HexTerrainMeshData terrainMeshData;
 
         public float HexFlatToFlatMeters => Mathf.Max(1f, hexFlatToFlatMeters);
         public float HexOuterRadiusMeters => HexFlatToFlatMeters / SqrtThree;
-        public IReadOnlyDictionary<string, SharedHeightPoint> SharedPoints => sharedPoints;
+        public TerrainFrameData TerrainFrameData => terrainFrameData;
+        public IReadOnlyDictionary<string, SharedHeightPoint> SharedPoints => terrainFrameData == null ? EmptySharedPoints : terrainFrameData.SharedPoints;
 
         private void Start()
         {
@@ -79,9 +82,9 @@ namespace LostForest.Phase2.World
         public void Rebuild()
         {
             ClearChildren();
-            sharedPoints.Clear();
-            localPointReferenceCount = 0;
-            reusedPointReferenceCount = 0;
+            terrainFrameData = TerrainFrameGenerator.GenerateRadiusOne(CreateTerrainFrameSettings());
+            terrainMeshData = new HexTerrainMeshData(transform, "7 Hex Terrain Mesh Debug View");
+            terrainMeshData.SetColliderGenerationRequested(showTerrainSurface && addTerrainMeshColliders);
 
             Material outlineMaterial = CreateLineMaterial("7 Hex Outline Material", outlineColor);
             Material interiorMaterial = CreateLineMaterial("7 Hex Interior Material", interiorLineColor);
@@ -90,12 +93,13 @@ namespace LostForest.Phase2.World
             Material vertexMaterial = CreatePointMaterial("7 Hex Vertex Point Material", vertexColor);
             Material edgeMaterial = CreatePointMaterial("7 Hex Edge Point Material", edgeMidpointColor);
             Material innerMaterial = CreatePointMaterial("7 Hex Inner Point Material", innerPointColor);
+            HexTerrainMeshSettings terrainMeshSettings = CreateTerrainMeshSettings();
 
-            List<Vector2Int> axialSlots = GetRadiusOneAxialSlots();
+            CreatePointMarkers(terrainFrameData, centerMaterial, vertexMaterial, edgeMaterial, innerMaterial);
 
-            for (int i = 0; i < axialSlots.Count; i++)
+            for (int i = 0; i < terrainFrameData.Slots.Count; i++)
             {
-                BuildSlot(axialSlots[i], outlineMaterial, interiorMaterial, terrainMaterial, centerMaterial, vertexMaterial, edgeMaterial, innerMaterial);
+                terrainMeshData.Append(BuildSlot(terrainFrameData.Slots[i], outlineMaterial, interiorMaterial, terrainMaterial, terrainMeshSettings));
             }
 
             if (showConformingTileAnchors)
@@ -103,36 +107,51 @@ namespace LostForest.Phase2.World
                 BuildConformingTileAnchorProof();
             }
 
-            Debug.Log(BuildHeightPointReport());
+            Debug.Log(BuildHeightPointReport(terrainFrameData));
         }
 
-        private void BuildSlot(
-            Vector2Int axial,
+        [ContextMenu("Validate Terrain Mesh Colliders")]
+        public void ValidateTerrainMeshColliders()
+        {
+            if (terrainMeshData == null)
+            {
+                Debug.LogWarning("Lost Forest Phase 2 terrain collider validation could not run because no terrain mesh data exists. Rebuild the 7 hex terrain frame first.");
+                return;
+            }
+
+            bool validationPassed = terrainMeshData.ValidateColliderReadiness(out string validationMessage);
+            string logMessage = $"Lost Forest Phase 2 terrain collider validation: {validationMessage}";
+
+            if (validationPassed)
+            {
+                Debug.Log(logMessage);
+            }
+            else
+            {
+                Debug.LogWarning(logMessage);
+            }
+        }
+
+        private HexTerrainMeshData BuildSlot(
+            TerrainSlotData slot,
             Material outlineMaterial,
             Material interiorMaterial,
             Material terrainMaterial,
-            Material centerMaterial,
-            Material vertexMaterial,
-            Material edgeMaterial,
-            Material innerMaterial)
+            HexTerrainMeshSettings terrainMeshSettings)
         {
-            string slotLabel = GetSlotLabel(axial);
-            Vector3 center = HexFrameMath.GetFlatTopHexCenterFromAxial(axial, HexOuterRadiusMeters);
-            Vector3[] vertices = GetVertices(center);
-            Vector3[] edgeMidpoints = GetEdgeMidpoints(vertices);
-            Vector3[] innerPoints = GetInnerPoints(center, vertices);
-
-            SharedHeightPoint centerPoint = RegisterPoint(slotLabel, "C", TerrainPointKind.Center, center, centerMaterial, centerPointSize);
-            SharedHeightPoint[] vertexPoints = RegisterPoints(slotLabel, "V", TerrainPointKind.Vertex, vertices, vertexMaterial, boundaryPointSize);
-            SharedHeightPoint[] edgePoints = RegisterPoints(slotLabel, "E", TerrainPointKind.EdgeMidpoint, edgeMidpoints, edgeMaterial, boundaryPointSize);
-            SharedHeightPoint[] innerHeightPoints = RegisterPoints(slotLabel, "I", TerrainPointKind.Inner, innerPoints, innerMaterial, innerPointSize);
+            string slotLabel = slot.Label;
+            SharedHeightPoint centerPoint = slot.CenterPoint;
+            IReadOnlyList<SharedHeightPoint> vertexPoints = slot.VertexPoints;
+            IReadOnlyList<SharedHeightPoint> edgePoints = slot.EdgeMidpointPoints;
+            IReadOnlyList<SharedHeightPoint> innerHeightPoints = slot.InnerPoints;
+            HexTerrainMeshData slotMeshData = null;
 
             Transform slotRoot = new GameObject($"Slot {slotLabel}").transform;
             slotRoot.SetParent(transform, false);
 
             if (showTerrainSurface)
             {
-                CreateTerrainSurface(slotRoot, slotLabel, centerPoint, vertexPoints, edgePoints, innerHeightPoints, terrainMaterial);
+                slotMeshData = HexTerrainMeshBuilder.BuildSlotSurface(slot, slotRoot, terrainMaterial, terrainMeshSettings);
             }
 
             if (showHexOutlines)
@@ -154,130 +173,80 @@ namespace LostForest.Phase2.World
             {
                 CreateLabel(slotRoot, $"Label {slotLabel}", $"{slotLabel}.C\nTile --\nH {centerPoint.Height:0.0}m", centerPoint.Position + Vector3.up * labelLift, centerColor, labelSize);
             }
+
+            return slotMeshData;
         }
 
-        private SharedHeightPoint[] RegisterPoints(string slotLabel, string labelPrefix, TerrainPointKind kind, IReadOnlyList<Vector3> positions, Material material, float size)
+        private TerrainFrameSettings CreateTerrainFrameSettings()
         {
-            SharedHeightPoint[] points = new SharedHeightPoint[positions.Count];
+            return new TerrainFrameSettings(
+                hexFlatToFlatMeters,
+                heightSeed,
+                heightAmplitudeMeters,
+                visualHeightMultiplier,
+                broadHeightScale,
+                noiseHeightScale);
+        }
 
-            for (int i = 0; i < points.Length; i++)
+        private HexTerrainMeshSettings CreateTerrainMeshSettings()
+        {
+            return new HexTerrainMeshSettings(
+                terrainSurfaceLift,
+                addTerrainMeshColliders,
+                markTerrainSurfaceStatic,
+                false);
+        }
+
+        private void CreatePointMarkers(
+            TerrainFrameData frameData,
+            Material centerMaterial,
+            Material vertexMaterial,
+            Material edgeMaterial,
+            Material innerMaterial)
+        {
+            if (frameData == null)
             {
-                points[i] = RegisterPoint(slotLabel, $"{labelPrefix}{i}", kind, positions[i], material, size);
+                return;
             }
 
-            return points;
-        }
-
-        private SharedHeightPoint RegisterPoint(string slotLabel, string localLabel, TerrainPointKind kind, Vector3 planarPosition, Material material, float size)
-        {
-            string globalKey = GetGlobalPointKey(planarPosition);
-            string localReference = $"{slotLabel}.{localLabel}";
-            localPointReferenceCount++;
-
-            if (!sharedPoints.TryGetValue(globalKey, out SharedHeightPoint sharedPoint))
+            for (int i = 0; i < frameData.SharedPointList.Count; i++)
             {
-                float height = GetHeight(planarPosition);
-                Vector3 elevatedPosition = new Vector3(planarPosition.x, height * Mathf.Max(0f, visualHeightMultiplier), planarPosition.z);
-                sharedPoint = new SharedHeightPoint(globalKey, kind, elevatedPosition, height);
-                sharedPoints.Add(globalKey, sharedPoint);
+                SharedHeightPoint sharedPoint = frameData.SharedPointList[i];
 
-                if (ShouldShowPointKind(kind))
+                if (ShouldShowPointKind(sharedPoint.Kind))
                 {
                     GameObject pointObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    pointObject.name = $"{globalKey} {kind}";
+                    pointObject.name = $"{sharedPoint.PointId} {sharedPoint.Kind}";
                     pointObject.transform.SetParent(transform, false);
-                    pointObject.transform.position = elevatedPosition;
-                    pointObject.transform.localScale = Vector3.one * size;
-                    pointObject.GetComponent<Renderer>().sharedMaterial = material;
+                    pointObject.transform.position = sharedPoint.Position;
+                    pointObject.transform.localScale = Vector3.one * GetPointSize(sharedPoint.Kind);
+                    pointObject.GetComponent<Renderer>().sharedMaterial = GetPointMaterial(sharedPoint.Kind, centerMaterial, vertexMaterial, edgeMaterial, innerMaterial);
+                }
+
+                if (showPointLabels && sharedPoint.Kind != TerrainPointKind.Center)
+                {
+                    for (int referenceIndex = 0; referenceIndex < sharedPoint.LocalReferences.Count; referenceIndex++)
+                    {
+                        string localReference = sharedPoint.LocalReferences[referenceIndex];
+                        string label = $"{localReference}\n{sharedPoint.PointId}\nH {sharedPoint.Height:0.0}m";
+                        CreateLabel(transform, $"Label {localReference}", label, sharedPoint.Position + Vector3.up * labelLift, GetColor(sharedPoint.Kind), labelSize * 0.58f);
+                    }
                 }
             }
-            else
-            {
-                reusedPointReferenceCount++;
-            }
-
-            sharedPoint.AddLocalReference(localReference);
-
-            if (showPointLabels && kind != TerrainPointKind.Center)
-            {
-                string label = $"{localReference}\n{globalKey}\nH {sharedPoint.Height:0.0}m";
-                CreateLabel(transform, $"Label {localReference}", label, sharedPoint.Position + Vector3.up * labelLift, GetColor(kind), labelSize * 0.58f);
-            }
-
-            return sharedPoint;
-        }
-
-        private void CreateTerrainSurface(
-            Transform parent,
-            string slotLabel,
-            SharedHeightPoint centerPoint,
-            IReadOnlyList<SharedHeightPoint> vertexPoints,
-            IReadOnlyList<SharedHeightPoint> edgePoints,
-            IReadOnlyList<SharedHeightPoint> innerPoints,
-            Material terrainMaterial)
-        {
-            GameObject surfaceObject = new GameObject($"Slot {slotLabel} White Terrain Surface");
-            surfaceObject.transform.SetParent(parent, false);
-
-            Vector3[] meshVertices = new Vector3[19];
-            meshVertices[0] = Lift(centerPoint.Position, terrainSurfaceLift);
-
-            for (int i = 0; i < 6; i++)
-            {
-                meshVertices[1 + i] = Lift(vertexPoints[i].Position, terrainSurfaceLift);
-                meshVertices[7 + i] = Lift(edgePoints[i].Position, terrainSurfaceLift);
-                meshVertices[13 + i] = Lift(innerPoints[i].Position, terrainSurfaceLift);
-            }
-
-            List<int> triangles = new List<int>(72);
-
-            for (int i = 0; i < 6; i++)
-            {
-                int next = (i + 1) % 6;
-                int vertex = 1 + i;
-                int nextVertex = 1 + next;
-                int edge = 7 + i;
-                int inner = 13 + i;
-                int nextInner = 13 + next;
-
-                triangles.Add(0);
-                triangles.Add(nextInner);
-                triangles.Add(inner);
-
-                triangles.Add(inner);
-                triangles.Add(edge);
-                triangles.Add(vertex);
-
-                triangles.Add(inner);
-                triangles.Add(nextInner);
-                triangles.Add(edge);
-
-                triangles.Add(nextInner);
-                triangles.Add(nextVertex);
-                triangles.Add(edge);
-            }
-
-            Mesh mesh = new Mesh();
-            mesh.name = $"Slot {slotLabel} Terrain Surface Mesh";
-            mesh.SetVertices(meshVertices);
-            mesh.SetTriangles(triangles, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-
-            MeshFilter meshFilter = surfaceObject.AddComponent<MeshFilter>();
-            meshFilter.sharedMesh = mesh;
-
-            MeshRenderer meshRenderer = surfaceObject.AddComponent<MeshRenderer>();
-            meshRenderer.sharedMaterial = terrainMaterial;
         }
 
         private void BuildConformingTileAnchorProof()
         {
+            if (terrainFrameData == null)
+            {
+                return;
+            }
+
             Transform proofRoot = new GameObject("Dropped Tile Anchors Conformed To Frame Heights").transform;
             proofRoot.SetParent(transform, false);
 
             Material markerMaterial = CreatePointMaterial("Conforming Tile Anchor Material", conformingTileAnchorColor);
-            TileConstructionAnchors anchors = TileConstructionAnchors.CreatePrototypeHexAnchors(HexOuterRadiusMeters);
+            TileConstructionAnchors anchors = TileConstructionAnchors.CreatePrototypeHexAnchors(terrainFrameData.Settings.HexOuterRadiusMeters);
             int conformedCount = 0;
 
             foreach (TileAnchor anchor in anchors.AllContentAnchors)
@@ -288,16 +257,15 @@ namespace LostForest.Phase2.World
                 }
 
                 Vector3 rotatedLocal = TileHexAnchorMath.RotateLocalContent(anchor.LocalPosition, conformingTileOrientationIndex);
-                string globalKey = GetGlobalPointKey(rotatedLocal);
 
-                if (!sharedPoints.TryGetValue(globalKey, out SharedHeightPoint heightPoint))
+                if (!terrainFrameData.TryGetSharedPointAtPosition(rotatedLocal, out SharedHeightPoint heightPoint))
                 {
                     continue;
                 }
 
                 Vector3 markerPosition = heightPoint.Position + Vector3.up * conformingAnchorLift;
                 GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                marker.name = $"Conformed {anchor.Id} O{conformingTileOrientationIndex} -> {globalKey}";
+                marker.name = $"Conformed {anchor.Id} O{conformingTileOrientationIndex} -> {heightPoint.PointId}";
                 marker.transform.SetParent(proofRoot, false);
                 marker.transform.position = markerPosition;
                 marker.transform.localScale = Vector3.one * conformingAnchorSize;
@@ -306,7 +274,7 @@ namespace LostForest.Phase2.World
                 CreateLabel(
                     proofRoot,
                     $"Label {marker.name}",
-                    $"{anchor.Id}\nO{conformingTileOrientationIndex}\n{globalKey}\nH {heightPoint.Height:0.0}m",
+                    $"{anchor.Id}\nO{conformingTileOrientationIndex}\n{heightPoint.PointId}\nH {heightPoint.Height:0.0}m",
                     markerPosition + Vector3.up * labelLift,
                     conformingTileAnchorColor,
                     labelSize * 0.52f);
@@ -321,112 +289,6 @@ namespace LostForest.Phase2.World
                 Vector3.up * 18f,
                 conformingTileAnchorColor,
                 labelSize);
-        }
-
-        private Vector3[] GetVertices(Vector3 center)
-        {
-            Vector3[] vertices = new Vector3[6];
-
-            for (int i = 0; i < vertices.Length; i++)
-            {
-                float radians = Mathf.Deg2Rad * (60f * i);
-                vertices[i] = center + new Vector3(Mathf.Cos(radians) * HexOuterRadiusMeters, 0f, Mathf.Sin(radians) * HexOuterRadiusMeters);
-            }
-
-            return vertices;
-        }
-
-        private static Vector3[] GetEdgeMidpoints(IReadOnlyList<Vector3> vertices)
-        {
-            Vector3[] edgeMidpoints = new Vector3[6];
-
-            for (int i = 0; i < edgeMidpoints.Length; i++)
-            {
-                edgeMidpoints[i] = (vertices[i] + vertices[(i + 1) % 6]) * 0.5f;
-            }
-
-            return edgeMidpoints;
-        }
-
-        private static Vector3[] GetInnerPoints(Vector3 center, IReadOnlyList<Vector3> vertices)
-        {
-            Vector3[] innerPoints = new Vector3[6];
-
-            for (int i = 0; i < innerPoints.Length; i++)
-            {
-                innerPoints[i] = Vector3.Lerp(center, vertices[i], 0.5f);
-            }
-
-            return innerPoints;
-        }
-
-        private static List<Vector2Int> GetRadiusOneAxialSlots()
-        {
-            return new List<Vector2Int>
-            {
-                Vector2Int.zero,
-                new Vector2Int(1, 0),
-                new Vector2Int(1, -1),
-                new Vector2Int(0, -1),
-                new Vector2Int(-1, 0),
-                new Vector2Int(-1, 1),
-                new Vector2Int(0, 1)
-            };
-        }
-
-        private static string GetSlotLabel(Vector2Int axial)
-        {
-            if (axial == Vector2Int.zero)
-            {
-                return "Center";
-            }
-
-            if (axial == new Vector2Int(1, 0))
-            {
-                return "East";
-            }
-
-            if (axial == new Vector2Int(1, -1))
-            {
-                return "Northeast";
-            }
-
-            if (axial == new Vector2Int(0, -1))
-            {
-                return "Northwest";
-            }
-
-            if (axial == new Vector2Int(-1, 0))
-            {
-                return "West";
-            }
-
-            if (axial == new Vector2Int(-1, 1))
-            {
-                return "Southwest";
-            }
-
-            return "Southeast";
-        }
-
-        private static string GetGlobalPointKey(Vector3 position)
-        {
-            int x = Mathf.RoundToInt(position.x * 100f);
-            int z = Mathf.RoundToInt(position.z * 100f);
-            return $"HP_{x}_{z}";
-        }
-
-        private float GetHeight(Vector3 planarPosition)
-        {
-            float broad = Mathf.Sin((planarPosition.x + heightSeed * 0.37f) * broadHeightScale)
-                + Mathf.Cos((planarPosition.z - heightSeed * 0.23f) * broadHeightScale);
-            broad *= 0.5f;
-
-            float noise = Mathf.PerlinNoise(
-                heightSeed * 0.011f + planarPosition.x * noiseHeightScale,
-                heightSeed * 0.017f + planarPosition.z * noiseHeightScale) - 0.5f;
-
-            return (broad * 0.65f + noise * 0.7f) * Mathf.Max(0f, heightAmplitudeMeters);
         }
 
         private bool ShouldShowPointKind(TerrainPointKind kind)
@@ -446,18 +308,6 @@ namespace LostForest.Phase2.World
             }
         }
 
-        private static Vector3[] GetPositions(IReadOnlyList<SharedHeightPoint> points)
-        {
-            Vector3[] positions = new Vector3[points.Count];
-
-            for (int i = 0; i < points.Count; i++)
-            {
-                positions[i] = points[i].Position;
-            }
-
-            return positions;
-        }
-
         private static Vector3[] GetLiftedPositions(IReadOnlyList<SharedHeightPoint> points, float lift)
         {
             Vector3[] positions = new Vector3[points.Count];
@@ -475,59 +325,42 @@ namespace LostForest.Phase2.World
             return position + Vector3.up * lift;
         }
 
-        private string BuildHeightPointReport()
+        private string BuildHeightPointReport(TerrainFrameData frameData)
         {
-            int centerCount = 0;
-            int vertexCount = 0;
-            int edgeCount = 0;
-            int innerCount = 0;
-            int multiReferencePointCount = 0;
-            SharedHeightPoint sampleSharedPoint = null;
-
-            foreach (SharedHeightPoint point in sharedPoints.Values)
+            if (frameData == null)
             {
-                switch (point.Kind)
-                {
-                    case TerrainPointKind.Center:
-                        centerCount++;
-                        break;
-                    case TerrainPointKind.Vertex:
-                        vertexCount++;
-                        break;
-                    case TerrainPointKind.EdgeMidpoint:
-                        edgeCount++;
-                        break;
-                    case TerrainPointKind.Inner:
-                        innerCount++;
-                        break;
-                }
-
-                if (point.ReferenceCount > 1)
-                {
-                    multiReferencePointCount++;
-
-                    if (sampleSharedPoint == null)
-                    {
-                        sampleSharedPoint = point;
-                    }
-                }
+                return "Lost Forest Phase 2 Frame Height Point Debug\nNo TerrainFrameData generated.";
             }
 
+            TerrainFrameSettings settings = frameData.Settings;
+            SharedHeightPoint sampleSharedPoint = frameData.GetFirstMultiReferencePoint();
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("Lost Forest Phase 2 Frame Height Point Debug");
-            builder.AppendLine($"Hex flat-to-flat\t{HexFlatToFlatMeters:0.##}m");
-            builder.AppendLine($"Height seed\t{heightSeed}");
-            builder.AppendLine($"Height amplitude\t{heightAmplitudeMeters:0.##}m");
-            builder.AppendLine($"Visual height multiplier\t{visualHeightMultiplier:0.##}x");
-            builder.AppendLine($"Local point references\t{localPointReferenceCount}");
-            builder.AppendLine($"Unique shared points\t{sharedPoints.Count}");
-            builder.AppendLine($"Reused point references\t{reusedPointReferenceCount}");
-            builder.AppendLine($"Multi-reference shared points\t{multiReferencePointCount}");
-            builder.AppendLine($"Centers\t{centerCount}");
-            builder.AppendLine($"Vertices\t{vertexCount}");
-            builder.AppendLine($"Edge midpoints\t{edgeCount}");
-            builder.AppendLine($"Inner points\t{innerCount}");
+            builder.AppendLine($"Hex flat-to-flat\t{settings.HexFlatToFlatMeters:0.##}m");
+            builder.AppendLine($"Height seed\t{settings.HeightSeed}");
+            builder.AppendLine($"Height amplitude\t{settings.HeightAmplitudeMeters:0.##}m");
+            builder.AppendLine($"Visual height multiplier\t{settings.VisualHeightMultiplier:0.##}x");
+            builder.AppendLine($"Slots\t{frameData.SlotCount}");
+            builder.AppendLine($"Local point references\t{frameData.LocalPointReferenceCount}");
+            builder.AppendLine($"Unique shared points\t{frameData.SharedPointCount}");
+            builder.AppendLine($"Reused point references\t{frameData.ReusedPointReferenceCount}");
+            builder.AppendLine($"Multi-reference shared points\t{frameData.CountMultiReferencePoints()}");
+            builder.AppendLine($"Shared-boundary validation\t{(frameData.HasSharedBoundaryReuse ? "Passed" : "Failed")}");
+            builder.AppendLine($"Centers\t{frameData.CountPointsByKind(TerrainPointKind.Center)}");
+            builder.AppendLine($"Vertices\t{frameData.CountPointsByKind(TerrainPointKind.Vertex)}");
+            builder.AppendLine($"Edge midpoints\t{frameData.CountPointsByKind(TerrainPointKind.EdgeMidpoint)}");
+            builder.AppendLine($"Inner points\t{frameData.CountPointsByKind(TerrainPointKind.Inner)}");
             builder.AppendLine($"Terrain surface\t{(showTerrainSurface ? "Enabled" : "Disabled")}");
+            builder.AppendLine($"Terrain mesh builder\t{HexTerrainMeshBuilder.BuilderName}");
+            builder.AppendLine($"Terrain meshes generated\t{(terrainMeshData == null ? 0 : terrainMeshData.SurfaceCount)}");
+            builder.AppendLine($"Terrain mesh vertices\t{(terrainMeshData == null ? 0 : terrainMeshData.TotalVertexCount)}");
+            builder.AppendLine($"Terrain mesh triangles\t{(terrainMeshData == null ? 0 : terrainMeshData.TotalTriangleCount)}");
+            builder.AppendLine($"Terrain mesh collider generation\t{(terrainMeshData != null && terrainMeshData.ColliderGenerationRequested ? "Enabled" : "Disabled")}");
+            builder.AppendLine($"Terrain mesh collider mode\t{HexTerrainCollisionBuilder.PerSurfaceModeLabel}");
+            builder.AppendLine($"Terrain mesh colliders\t{(terrainMeshData == null ? 0 : terrainMeshData.ColliderCount)}");
+            builder.AppendLine($"Terrain meshes skipped\t{(terrainMeshData == null ? 0 : terrainMeshData.SkippedMeshCount)}");
+            builder.AppendLine($"Terrain mesh colliders skipped\t{(terrainMeshData == null ? 0 : terrainMeshData.SkippedColliderCount)}");
+            builder.AppendLine($"Terrain collider validation\t{GetTerrainColliderValidationLine()}");
             builder.AppendLine($"Tile conformity proof\t{(showConformingTileAnchors ? "Enabled" : "Disabled")}");
             builder.AppendLine($"Conforming tile orientation\t{conformingTileOrientationIndex} / {conformingTileOrientationIndex * 60} deg");
 
@@ -538,6 +371,17 @@ namespace LostForest.Phase2.World
             }
 
             return builder.ToString();
+        }
+
+        private string GetTerrainColliderValidationLine()
+        {
+            if (terrainMeshData == null)
+            {
+                return "Not run";
+            }
+
+            bool validationPassed = terrainMeshData.ValidateColliderReadiness(out string validationMessage);
+            return $"{(validationPassed ? "OK" : "Needs attention")} - {validationMessage}";
         }
 
         private void CreateLine(Transform parent, string name, Vector3 start, Vector3 end, Material material, float width)
@@ -633,6 +477,39 @@ namespace LostForest.Phase2.World
                     return innerPointColor;
                 default:
                     return centerColor;
+            }
+        }
+
+        private float GetPointSize(TerrainPointKind kind)
+        {
+            switch (kind)
+            {
+                case TerrainPointKind.Center:
+                    return centerPointSize;
+                case TerrainPointKind.Inner:
+                    return innerPointSize;
+                default:
+                    return boundaryPointSize;
+            }
+        }
+
+        private static Material GetPointMaterial(
+            TerrainPointKind kind,
+            Material centerMaterial,
+            Material vertexMaterial,
+            Material edgeMaterial,
+            Material innerMaterial)
+        {
+            switch (kind)
+            {
+                case TerrainPointKind.Vertex:
+                    return vertexMaterial;
+                case TerrainPointKind.EdgeMidpoint:
+                    return edgeMaterial;
+                case TerrainPointKind.Inner:
+                    return innerMaterial;
+                default:
+                    return centerMaterial;
             }
         }
 

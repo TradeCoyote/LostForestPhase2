@@ -38,6 +38,17 @@ Purpose:
 
 Turn the current 7-hex debug point display into a reusable terrain data graph.
 
+Implementation status:
+
+- Extracted from `SevenHexTerrainFrameDebugView` into reusable Frame-owned world data classes:
+  - `TerrainFrameSettings`
+  - `TerrainFrameGenerator`
+  - `TerrainFrameData`
+  - `TerrainSlotData`
+- `SevenHexTerrainFrameDebugView` is now a debug renderer/view over generated data.
+- Shared point IDs, local Slot references, Slot neighbor indices, deterministic heights, point kind counts, and shared-boundary reuse are available from the terrain data graph.
+- The Tile conformity proof still reads Frame-owned height points through deterministic position lookup; Tiles and Tile anchors do not own terrain height.
+
 Scope:
 
 - Create a data-backed representation for the radius-1 terrain frame.
@@ -71,6 +82,18 @@ Recommended files / areas:
 Purpose:
 
 Generate an actual low-poly terrain mesh from the shared height-point graph.
+
+Implementation status:
+
+- Added a reusable `HexTerrainMeshBuilder` under `Assets/LostForest/Scripts/World`.
+- Added `HexTerrainCollisionBuilder` so built-in Physics `MeshCollider` creation is owned by the reusable terrain layer instead of the debug view or Tiles.
+- Added `HexTerrainMeshSettings` for surface lift, mesh naming, group naming, optional per-surface collider creation, static marking, and generation reporting.
+- Added `HexTerrainMeshData` / `HexTerrainMeshSurface` reporting for generated surface count, mesh count, vertex count, triangle count, collider count, skipped mesh count, skipped collider count, and collider readiness validation.
+- `SevenHexTerrainFrameDebugView` now calls the builder for terrain surfaces instead of owning mesh topology directly.
+- Generated mesh vertices still come from Frame-owned `SharedHeightPoint.Position` references through `TerrainSlotData`.
+- The current radius-1 test should generate 7 terrain surfaces, 133 mesh vertices, 168 mesh triangles, and 7 optional mesh colliders when terrain surfaces and collider generation are enabled.
+- Collider validation is available from the 7-hex debug view context menu and reports enabled/disabled state, collider count, mesh count, and skipped mesh/collider counts.
+- Manual Unity editor verification is still required after opening or repairing the 7-hex terrain frame scene.
 
 Scope:
 
