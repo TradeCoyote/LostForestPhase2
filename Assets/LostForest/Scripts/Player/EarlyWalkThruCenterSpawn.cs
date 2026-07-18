@@ -1,4 +1,5 @@
 using System.Collections;
+using LostForest.Phase2.Landmarks;
 using LostForest.Phase2.World;
 using UnityEngine;
 
@@ -18,11 +19,14 @@ namespace LostForest.Phase2.Player
 
     public sealed class EarlyWalkThruCenterSpawn : MonoBehaviour
     {
+        private const string HomeLandmarkObjectName = "Home Standing Stone Landmark";
+
         [SerializeField] private SevenHexTerrainFrameDebugView terrainFrame;
         [SerializeField] private EarlyWalkThruSpawnSlot spawnSlot = EarlyWalkThruSpawnSlot.Center;
         [SerializeField] private float footClearanceMeters = 0.18f;
         [SerializeField] private bool spawnOnStart = true;
         [SerializeField] private bool logSpawnPosition = true;
+        [SerializeField] private bool ensureHomeSystemsOnSpawn = true;
 
         private CharacterController characterController;
         private EarlyWalkThruFirstPersonController firstPersonController;
@@ -83,6 +87,11 @@ namespace LostForest.Phase2.Player
                 return;
             }
 
+            if (ensureHomeSystemsOnSpawn)
+            {
+                EnsureHomeSystems();
+            }
+
             TerrainSlotData slot = ResolveSpawnSlot(frameData);
 
             if (slot == null || slot.CenterPoint == null)
@@ -123,6 +132,59 @@ namespace LostForest.Phase2.Player
         {
             characterController = GetComponent<CharacterController>();
             firstPersonController = GetComponent<EarlyWalkThruFirstPersonController>();
+        }
+
+        private void EnsureHomeSystems()
+        {
+            if (terrainFrame == null)
+            {
+                return;
+            }
+
+            HomeRegionDefinition homeRegion = terrainFrame.GetComponent<HomeRegionDefinition>();
+
+            if (homeRegion == null)
+            {
+                homeRegion = terrainFrame.gameObject.AddComponent<HomeRegionDefinition>();
+            }
+
+            homeRegion.SetTerrainFrame(terrainFrame);
+            homeRegion.SetHomeAxialCoordinate(Vector2Int.zero);
+
+            HomeLandmarkBuilder homeLandmark = FindAnyObjectByType<HomeLandmarkBuilder>();
+            GameObject landmarkObject;
+
+            if (homeLandmark == null)
+            {
+                landmarkObject = GameObject.Find(HomeLandmarkObjectName);
+
+                if (landmarkObject == null)
+                {
+                    landmarkObject = new GameObject(HomeLandmarkObjectName);
+                }
+
+                homeLandmark = landmarkObject.AddComponent<HomeLandmarkBuilder>();
+            }
+            else
+            {
+                landmarkObject = homeLandmark.gameObject;
+            }
+
+            landmarkObject.name = HomeLandmarkObjectName;
+            homeLandmark.SetTerrainFrame(terrainFrame);
+            homeLandmark.SetHomeRegion(homeRegion);
+            homeLandmark.TryRebuildLandmark();
+
+            PlayerTerrainRegionTracker regionTracker = GetComponent<PlayerTerrainRegionTracker>();
+
+            if (regionTracker == null)
+            {
+                regionTracker = gameObject.AddComponent<PlayerTerrainRegionTracker>();
+            }
+
+            regionTracker.SetTerrainFrame(terrainFrame);
+            regionTracker.SetHomeRegion(homeRegion);
+            regionTracker.RefreshCurrentRegion(true);
         }
 
         private TerrainSlotData ResolveSpawnSlot(TerrainFrameData frameData)

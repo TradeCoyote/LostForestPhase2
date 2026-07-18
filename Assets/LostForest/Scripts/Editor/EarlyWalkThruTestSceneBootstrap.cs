@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.IO;
+using LostForest.Phase2.Landmarks;
 using LostForest.Phase2.Player;
 using LostForest.Phase2.World;
 using UnityEditor;
@@ -12,6 +13,7 @@ namespace LostForest.Phase2.Editor
     public static class EarlyWalkThruTestSceneBootstrap
     {
         private const string ScenePath = "Assets/LostForest/Scenes/Phase2_EarlyWalkThruTest.unity";
+        private const string HomeLandmarkObjectName = "Home Standing Stone Landmark";
 
         [MenuItem("Lost Forest/Bootstrap/Open Early WalkThru Test Scene")]
         public static void OpenEarlyWalkThruTestScene()
@@ -39,7 +41,10 @@ namespace LostForest.Phase2.Editor
             terrainFrame.ApplyEarlyWalkThruVisualDefaults();
             terrainFrame.Rebuild();
 
-            GameObject playerObject = EnsurePlayer(terrainFrame);
+            HomeRegionDefinition homeRegion = EnsureHomeRegion(terrainFrame);
+            EnsureHomeLandmark(terrainFrame, homeRegion);
+
+            GameObject playerObject = EnsurePlayer(terrainFrame, homeRegion);
             EnsureLight();
 
             Selection.activeGameObject = playerObject;
@@ -62,7 +67,44 @@ namespace LostForest.Phase2.Editor
             return terrainObject.AddComponent<SevenHexTerrainFrameDebugView>();
         }
 
-        private static GameObject EnsurePlayer(SevenHexTerrainFrameDebugView terrainFrame)
+        private static HomeRegionDefinition EnsureHomeRegion(SevenHexTerrainFrameDebugView terrainFrame)
+        {
+            HomeRegionDefinition homeRegion = GetOrAddComponent<HomeRegionDefinition>(terrainFrame.gameObject);
+            homeRegion.SetTerrainFrame(terrainFrame);
+            homeRegion.SetHomeAxialCoordinate(Vector2Int.zero);
+            return homeRegion;
+        }
+
+        private static HomeLandmarkBuilder EnsureHomeLandmark(SevenHexTerrainFrameDebugView terrainFrame, HomeRegionDefinition homeRegion)
+        {
+            HomeLandmarkBuilder homeLandmark = Object.FindAnyObjectByType<HomeLandmarkBuilder>();
+            GameObject landmarkObject;
+
+            if (homeLandmark == null)
+            {
+                landmarkObject = GameObject.Find(HomeLandmarkObjectName);
+
+                if (landmarkObject == null)
+                {
+                    landmarkObject = new GameObject(HomeLandmarkObjectName);
+                }
+
+                homeLandmark = GetOrAddComponent<HomeLandmarkBuilder>(landmarkObject);
+            }
+            else
+            {
+                landmarkObject = homeLandmark.gameObject;
+            }
+
+            landmarkObject.name = HomeLandmarkObjectName;
+            landmarkObject.transform.SetParent(null);
+            homeLandmark.SetTerrainFrame(terrainFrame);
+            homeLandmark.SetHomeRegion(homeRegion);
+            homeLandmark.RebuildLandmark();
+            return homeLandmark;
+        }
+
+        private static GameObject EnsurePlayer(SevenHexTerrainFrameDebugView terrainFrame, HomeRegionDefinition homeRegion)
         {
             EarlyWalkThruFirstPersonController existingController = Object.FindFirstObjectByType<EarlyWalkThruFirstPersonController>();
             GameObject playerObject = existingController == null
@@ -88,6 +130,10 @@ namespace LostForest.Phase2.Editor
             EarlyWalkThruCenterSpawn centerSpawn = GetOrAddComponent<EarlyWalkThruCenterSpawn>(playerObject);
             centerSpawn.SetTerrainFrame(terrainFrame);
             centerSpawn.SetSpawnSlot(EarlyWalkThruSpawnSlot.Center);
+
+            PlayerTerrainRegionTracker regionTracker = GetOrAddComponent<PlayerTerrainRegionTracker>(playerObject);
+            regionTracker.SetTerrainFrame(terrainFrame);
+            regionTracker.SetHomeRegion(homeRegion);
 
             GetOrAddComponent<EarlyWalkThruPositionLogger>(playerObject);
 

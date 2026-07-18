@@ -126,6 +126,14 @@ Recommended files / areas:
 
 ## Thread 3: First-Person Walk Test
 
+Implementation status:
+
+- Added `PlayerTerrainRegionTracker` on the first-person player.
+- Added `HomeRegionDefinition` on the Early WalkThru terrain frame object.
+- The Early WalkThru bootstrap wires the tracker to the generated 7-hex frame data and sets Home to the center Slot, axial `(0, 0)`.
+- The tracker resolves the current hidden Terrain Slot by nearest center using horizontal X/Z distance.
+- Console logs now report the starting region and region transitions with current Slot label, axial coordinate, previous Slot, center position, and `IsHome`.
+
 Purpose:
 
 Validate scale, slope feel, and basic movement across the 100m hex terrain.

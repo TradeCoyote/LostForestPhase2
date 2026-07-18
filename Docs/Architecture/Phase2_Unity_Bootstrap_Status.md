@@ -207,6 +207,9 @@ Source:
 - `Assets/LostForest/Scripts/Player/EarlyWalkThruCenterSpawn.cs`
 - `Assets/LostForest/Scripts/Player/EarlyWalkThruPositionLogger.cs`
 - `Assets/LostForest/Scripts/Editor/EarlyWalkThruTestSceneBootstrap.cs`
+- `Assets/LostForest/Scripts/Player/PlayerTerrainRegionTracker.cs`
+- `Assets/LostForest/Scripts/World/HomeRegionDefinition.cs`
+- `Assets/LostForest/Scripts/Landmarks/HomeLandmarkBuilder.cs`
 
 Use `Lost Forest > Bootstrap > Create or Repair Early WalkThru Test Scene` to create or repair:
 
@@ -219,19 +222,66 @@ Default behavior:
 - Spawns the player just above a selected Slot center point, defaulting to the center Slot.
 - Does not spawn on shared or unshared hex edges.
 - Uses keyboard WASD movement and mouse look only.
-- Logs current player XYZ position to the Unity Console.
+- Tracks the player's current hidden Terrain Slot from generated `TerrainFrameData`.
+- Defines the Home Region as the center Slot, axial `(0, 0)`, by default.
+- Places a simple three-stone Home landmark at the Home Slot center.
+- Uses black primitive cylinders with ordered child names and varied height, scale, and rotation so Home is visible in first-person.
+- Logs current player XYZ position to the Unity Console, including Slot/Home state when the tracker is present.
+- Logs Home landmark placement success, Home Slot label, axial coordinate, and world anchor position.
 - Keeps hex points and construction lines visible for this test.
 - Hides center labels, point labels, and the orange Tile conformity proof by default.
-- Adds no runes, stamina, chill, pursuer behavior, landmarks, or player-facing board UI.
+- Adds no runes, stamina, chill, pursuer behavior, final art, or player-facing board UI.
 
 Manual verification:
 
 1. Use `Lost Forest > Bootstrap > Create or Repair Early WalkThru Test Scene`.
-2. Press Play.
-3. Confirm the Console logs the spawn XYZ and recurring player XYZ positions.
-4. Move with WASD and look with the mouse.
-5. Walk from the center hex toward neighboring hexes and test seam crossings.
-6. Confirm the player lands on terrain collision instead of falling through.
+2. Confirm the scene contains `Home Standing Stone Landmark` with three child cylinder primitives.
+3. Confirm the black cylinders appear at the center Home Region and read as an in-world snowy-forest landmark, not board UI.
+4. Confirm the Console logs `Lost Forest Home Landmark placement` with `Succeeded=True`, Slot label, axial `(0, 0)`, and world position.
+5. Press Play.
+6. Confirm the Console logs the spawn XYZ, the starting player region, and recurring player XYZ positions.
+7. Move with WASD and look with the mouse.
+8. Walk around the standing stones, then move from the center hex toward neighboring hexes and test seam crossings.
+9. Confirm the Console logs region transitions only when the nearest generated Terrain Slot changes.
+10. Confirm transition logs identify current Slot label, axial coordinate, center world position, previous Slot, and `IsHome`.
+11. Return to the center Slot and confirm `IsHome=True`.
+12. Confirm the player lands on terrain collision instead of falling through.
+
+## Player Current Region / Home Region
+
+Added the first hidden gameplay identity bridge for the walkable 7-hex terrain proof.
+
+How it works:
+
+- `PlayerTerrainRegionTracker` lives on the first-person player.
+- It references the active `SevenHexTerrainFrameDebugView` for this prototype, then reads its generated `TerrainFrameData`.
+- If the frame has not generated data yet, the tracker can ask the terrain view to rebuild before querying.
+- Current region is resolved by nearest generated `TerrainSlotData` center using horizontal X/Z distance.
+- The tracker exposes the current Slot, previous Slot, label, axial coordinate, center world position, current frame data, the Home Region definition, and `IsInHomeRegion`.
+- Region logs are emitted when the player enters a different nearest Slot, with an initial log on Play.
+
+Home Region:
+
+- `HomeRegionDefinition` is a lightweight data holder on the terrain frame object in the Early WalkThru scene.
+- The bootstrap sets Home to axial `(0, 0)`, matching the center Terrain Slot in the radius-1 frame.
+- The label fallback is `Center` so the 7-hex proof remains robust while the frame data stays small.
+
+Home Landmark:
+
+- `HomeLandmarkBuilder` is a reusable scene component that resolves placement through `HomeRegionDefinition.TryGetHomeSlot(...)`.
+- The placement anchor is the resolved Home Slot center point from Frame-owned terrain data.
+- The current placeholder creates three black cylinders offset slightly forward from the anchor so they are visible from the first-person spawn.
+- A future stone prefab can be assigned on the builder without changing the Home Slot placement path.
+- Future Tile `000` or full-Field Home selection can update `HomeRegionDefinition`; the landmark builder should not need to change.
+- Future rune-return logic can query `HomeLandmarkBuilder.HomeSlot`, `AnchorWorldPosition`, `HasPlacement`, or `TryGetHomeAnchorWorldPosition(...)`.
+
+Expansion notes:
+
+- A future `TerrainFrameManager` or `WorldManager` should provide the same `TerrainFrameData` shape now provided by `SevenHexTerrainFrameDebugView`.
+- Radius-2 / 19-tile expansion should only require the provider to generate more Slots; nearest-center tracking loops over `TerrainFrameData.Slots`.
+- The Home landmark placement also loops through `TerrainFrameData` via the Home Region definition, so radius-2 / 19-tile expansion should not require a separate placement path.
+- Exact hex containment can replace the nearest-center method inside `PlayerTerrainRegionTracker` without changing downstream callers.
+- Future terrain tags, danger, visibility, chill modifiers, rune eligibility, and pursuer pressure can hang off the current Slot query path.
 
 ## Scope Held Back
 
@@ -244,3 +294,4 @@ The bootstrap intentionally does not include:
 - Pursuer behavior.
 - Visible board presentation.
 - Player-facing grid or tile labels.
+- Final landmark art.
