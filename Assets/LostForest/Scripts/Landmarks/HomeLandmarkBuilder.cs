@@ -10,6 +10,7 @@ namespace LostForest.Phase2.Landmarks
         [SerializeField] private bool rebuildOnStart = true;
         [SerializeField] private bool rebuildMissingFrameData = true;
         [SerializeField] private bool logPlacement = true;
+        [Tooltip("Primitive stone roots are embedded downward by this amount after terrain sampling.")]
         [SerializeField] private float surfaceLiftMeters = 0.08f;
         [SerializeField] private Color stoneColor = Color.black;
         [SerializeField] private GameObject stonePrefab;
@@ -43,7 +44,7 @@ namespace LostForest.Phase2.Landmarks
             if (TryResolveHomeSlot(out TerrainSlotData resolvedHomeSlot))
             {
                 homeSlot = resolvedHomeSlot;
-                anchorWorldPosition = GetSlotCenter(homeSlot);
+                anchorWorldPosition = GetGroundedSlotCenter(homeSlot, CreateSurfaceSampler());
                 worldPosition = anchorWorldPosition;
                 return true;
             }
@@ -74,19 +75,24 @@ namespace LostForest.Phase2.Landmarks
             }
 
             homeSlot = resolvedHomeSlot;
-            anchorWorldPosition = GetSlotCenter(homeSlot);
-            transform.position = anchorWorldPosition + Vector3.up * Mathf.Max(0f, surfaceLiftMeters);
+            TerrainSurfaceSampler surfaceSampler = CreateSurfaceSampler();
+            anchorWorldPosition = GetGroundedSlotCenter(homeSlot, surfaceSampler);
+            transform.position = anchorWorldPosition;
             transform.rotation = Quaternion.identity;
             transform.localScale = Vector3.one;
 
             Material stoneMaterial = CreateStoneMaterial();
-            CreateStone("Home Black Cylinder 01 Tall", new Vector3(0f, 0f, 3.33f), 0.63f, 6f, new Vector3(-1f, 4f, 0f), stoneMaterial);
-            CreateStone("Home Black Cylinder 02 West", new Vector3(-1.83f, 0f, 2.33f), 0.52f, 4.67f, new Vector3(0.75f, -10f, -1f), stoneMaterial);
-            CreateStone("Home Black Cylinder 03 East", new Vector3(1.83f, 0f, 2.5f), 0.55f, 5.17f, new Vector3(-0.75f, 12f, 1f), stoneMaterial);
+            surfaceSampler?.ResetStats();
+            int groundedStoneCount = 0;
+            int skippedStoneCount = 0;
 
-            hasPlacement = true;
-            LogPlacement(true, homeSlot, anchorWorldPosition);
-            return true;
+            CreateStone("Home Black Cylinder 01 Tall", new Vector3(0f, 0f, 3.33f), 0.63f, 6f, new Vector3(-1f, 4f, 0f), stoneMaterial, surfaceSampler, ref groundedStoneCount, ref skippedStoneCount);
+            CreateStone("Home Black Cylinder 02 West", new Vector3(-1.83f, 0f, 2.33f), 0.52f, 4.67f, new Vector3(0.75f, -10f, -1f), stoneMaterial, surfaceSampler, ref groundedStoneCount, ref skippedStoneCount);
+            CreateStone("Home Black Cylinder 03 East", new Vector3(1.83f, 0f, 2.5f), 0.55f, 5.17f, new Vector3(-0.75f, 12f, 1f), stoneMaterial, surfaceSampler, ref groundedStoneCount, ref skippedStoneCount);
+
+            hasPlacement = groundedStoneCount > 0;
+            LogPlacement(hasPlacement, homeSlot, anchorWorldPosition, groundedStoneCount, skippedStoneCount, surfaceSampler);
+            return hasPlacement;
         }
 
         private void Reset()
@@ -150,14 +156,38 @@ namespace LostForest.Phase2.Landmarks
             return homeRegion.TryGetHomeSlot(out resolvedHomeSlot);
         }
 
-        private void CreateStone(string name, Vector3 localGroundPosition, float radius, float height, Vector3 localEulerAngles, Material stoneMaterial)
+        private void CreateStone(
+            string name,
+            Vector3 localGroundPosition,
+            float radius,
+            float height,
+            Vector3 localEulerAngles,
+            Material stoneMaterial,
+            TerrainSurfaceSampler surfaceSampler,
+            ref int groundedStoneCount,
+            ref int skippedStoneCount)
         {
+            Vector3 samplePosition = anchorWorldPosition + new Vector3(localGroundPosition.x, 0f, localGroundPosition.z);
+
+            if (surfaceSampler == null || !surfaceSampler.TrySample(samplePosition, out TerrainSurfaceSample surfaceSample))
+            {
+                skippedStoneCount++;
+                return;
+            }
+
+            GameObject stoneRoot = new GameObject($"{name} Grounded Root");
+            stoneRoot.transform.position = surfaceSample.Position - Vector3.up * GetStoneEmbedMeters();
+            stoneRoot.transform.rotation = Quaternion.identity;
+            stoneRoot.transform.localScale = Vector3.one;
+            stoneRoot.transform.SetParent(transform, true);
+
             bool usesPrimitiveStone = stonePrefab == null;
             GameObject stone = usesPrimitiveStone ? GameObject.CreatePrimitive(PrimitiveType.Cylinder) : Instantiate(stonePrefab);
             stone.name = name;
-            stone.transform.SetParent(transform, false);
-            stone.transform.localPosition = localGroundPosition + Vector3.up * (height * 0.5f);
-            stone.transform.localRotation = Quaternion.Euler(localEulerAngles);
+            stone.transform.SetParent(stoneRoot.transform, false);
+            Quaternion localRotation = Quaternion.Euler(localEulerAngles);
+            stone.transform.localPosition = localRotation * (Vector3.up * (height * 0.5f));
+            stone.transform.localRotation = localRotation;
             stone.transform.localScale = usesPrimitiveStone
                 ? new Vector3(radius * 2f, height * 0.5f, radius * 2f)
                 : new Vector3(radius * 2f, height, radius * 2f);
@@ -171,9 +201,17 @@ namespace LostForest.Phase2.Landmarks
                     renderer.sharedMaterial = stoneMaterial;
                 }
             }
+
+            groundedStoneCount++;
         }
 
-        private void LogPlacement(bool succeeded, TerrainSlotData slot, Vector3 worldPosition)
+        private void LogPlacement(
+            bool succeeded,
+            TerrainSlotData slot,
+            Vector3 worldPosition,
+            int groundedStoneCount = 0,
+            int skippedStoneCount = 0,
+            TerrainSurfaceSampler surfaceSampler = null)
         {
             if (!logPlacement)
             {
@@ -192,12 +230,35 @@ namespace LostForest.Phase2.Landmarks
                 axial = homeRegion.HomeAxialCoordinate;
             }
 
-            Debug.Log($"Lost Forest Home Landmark placement: Succeeded={succeeded}, Slot={slotLabel}, Axial=({axial.x}, {axial.y}), World=({worldPosition.x:0.00}, {worldPosition.y:0.00}, {worldPosition.z:0.00})");
+            string groundingStats = surfaceSampler == null ? "Home stone grounding: Raycast=0, Fallback=0, Failed=0" : surfaceSampler.BuildStatsSummary("Home stone grounding");
+            Debug.Log($"Lost Forest Home Landmark placement: Succeeded={succeeded}, Slot={slotLabel}, Axial=({axial.x}, {axial.y}), World=({worldPosition.x:0.00}, {worldPosition.y:0.00}, {worldPosition.z:0.00}), GroundedStones={groundedStoneCount}, SkippedStones={skippedStoneCount}, {groundingStats}");
         }
 
         private static Vector3 GetSlotCenter(TerrainSlotData slot)
         {
             return slot.CenterPoint == null ? slot.WorldCenter : slot.CenterPoint.Position;
+        }
+
+        private TerrainSurfaceSampler CreateSurfaceSampler()
+        {
+            return terrainFrame == null ? null : terrainFrame.CreateTerrainSurfaceSampler();
+        }
+
+        private static Vector3 GetGroundedSlotCenter(TerrainSlotData slot, TerrainSurfaceSampler surfaceSampler)
+        {
+            Vector3 slotCenter = GetSlotCenter(slot);
+
+            if (surfaceSampler != null && surfaceSampler.TrySample(slotCenter, out TerrainSurfaceSample surfaceSample))
+            {
+                return surfaceSample.Position;
+            }
+
+            return slotCenter;
+        }
+
+        private float GetStoneEmbedMeters()
+        {
+            return Mathf.Clamp(surfaceLiftMeters, 0f, 0.25f);
         }
 
         private Material CreateStoneMaterial()
