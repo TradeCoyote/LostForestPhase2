@@ -206,6 +206,8 @@ Source:
 - `Assets/LostForest/Scripts/Player/EarlyWalkThruFirstPersonController.cs`
 - `Assets/LostForest/Scripts/Player/EarlyWalkThruCenterSpawn.cs`
 - `Assets/LostForest/Scripts/Player/EarlyWalkThruPositionLogger.cs`
+- `Assets/LostForest/Scripts/Feedback/PrototypeBirchForestDebugSpawner.cs`
+- `Assets/LostForest/Scripts/Feedback/PrototypeFogDirector.cs`
 - `Assets/LostForest/Scripts/Editor/EarlyWalkThruTestSceneBootstrap.cs`
 
 Use `Lost Forest > Bootstrap > Create or Repair Early WalkThru Test Scene` to create or repair:
@@ -222,7 +224,13 @@ Default behavior:
 - Logs current player XYZ position to the Unity Console.
 - Keeps hex points and construction lines visible for this test.
 - Hides center labels, point labels, and the orange Tile conformity proof by default.
+- Adds a prototype birch fog-readability spawner to the scene.
+- The spawner generates tall pale trunk stand-ins at Play time, using a `3x` trunk height multiplier over the earlier prototype range.
+- Each trunk gets a fixed reusable pattern of small dark circular bark bands at varied heights so fog tests can verify that markings are unclear in thick fog and become clearer as fog thins or the player approaches.
+- Adds a cheap prototype distance fog director using Unity built-in fog for first-pass field-of-view testing.
 - Adds no runes, stamina, chill, pursuer behavior, landmarks, or player-facing board UI.
+
+This scene is now a fixed 7-cell terrain and movement lab. It is not the current player-centered Field travel test.
 
 Manual verification:
 
@@ -232,6 +240,36 @@ Manual verification:
 4. Move with WASD and look with the mouse.
 5. Walk from the center hex toward neighboring hexes and test seam crossings.
 6. Confirm the player lands on terrain collision instead of falling through.
+
+## Grid Movement Fog Test
+
+Added the player-centered hidden Field travel test.
+
+Source:
+
+- `Assets/LostForest/Scripts/World/GridMovementWorldManager.cs`
+- `Assets/LostForest/Scripts/World/ActiveRegionRenderer.cs`
+- `Assets/LostForest/Scripts/World/RenderedSlotInstance.cs`
+- `Assets/LostForest/Scripts/Player/PlayerGridAddressTracker.cs`
+- `Assets/LostForest/Scripts/Debug/GridDebugHud.cs`
+- `Assets/LostForest/Scripts/Editor/GridMovementFogTestSceneBootstrap.cs`
+
+Use `Lost Forest > Bootstrap > Create or Repair Grid Movement Fog Test Scene` to create or repair:
+
+- `Assets/LostForest/Scenes/Phase2_GridMovementFogTest.unity`
+
+Default behavior:
+
+- Generates the canonical hidden `26 x 26` Field.
+- Finds Home / Tile `000`.
+- Spawns the player at Home.
+- Tracks the player's current hidden Slot while walking.
+- Renders an active radius around the player's current Slot.
+- Re-centers rendered Slots when the player crosses into a new hidden Slot.
+- Uses cheap built-in distance fog through `PrototypeFogDirector`.
+- Spawns reduced-count tall pale birch stand-ins with fixed dark bark bands for fog readability.
+
+This is the scene to use when testing travel through the hidden Field. The older Early WalkThru scene remains useful only for the fixed 7-cell terrain/collider lab.
 
 ## Scope Held Back
 

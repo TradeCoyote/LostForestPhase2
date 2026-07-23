@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.IO;
+using LostForest.Phase2.Feedback;
 using LostForest.Phase2.Player;
 using LostForest.Phase2.World;
 using UnityEditor;
@@ -38,8 +39,10 @@ namespace LostForest.Phase2.Editor
             SevenHexTerrainFrameDebugView terrainFrame = EnsureTerrainFrame();
             terrainFrame.ApplyEarlyWalkThruVisualDefaults();
             terrainFrame.Rebuild();
+            EnsurePrototypeBirchForest(terrainFrame);
 
             GameObject playerObject = EnsurePlayer(terrainFrame);
+            EnsurePrototypeFog();
             EnsureLight();
 
             Selection.activeGameObject = playerObject;
@@ -60,6 +63,38 @@ namespace LostForest.Phase2.Editor
 
             GameObject terrainObject = new GameObject("Early WalkThru 7 Hex Terrain Frame");
             return terrainObject.AddComponent<SevenHexTerrainFrameDebugView>();
+        }
+
+        private static PrototypeBirchForestDebugSpawner EnsurePrototypeBirchForest(SevenHexTerrainFrameDebugView terrainFrame)
+        {
+            PrototypeBirchForestDebugSpawner birchSpawner = Object.FindAnyObjectByType<PrototypeBirchForestDebugSpawner>();
+
+            if (birchSpawner == null)
+            {
+                GameObject birchObject = new GameObject("Prototype Birch Fog Readability Forest");
+                birchSpawner = birchObject.AddComponent<PrototypeBirchForestDebugSpawner>();
+            }
+
+            birchSpawner.gameObject.name = "Prototype Birch Fog Readability Forest";
+            birchSpawner.SetTerrainFrame(terrainFrame);
+            birchSpawner.ApplyEarlyFogVisibilityDefaults();
+            return birchSpawner;
+        }
+
+        private static PrototypeFogDirector EnsurePrototypeFog()
+        {
+            PrototypeFogDirector fogDirector = Object.FindAnyObjectByType<PrototypeFogDirector>();
+
+            if (fogDirector == null)
+            {
+                GameObject fogObject = new GameObject("Prototype Distance Fog Director");
+                fogDirector = fogObject.AddComponent<PrototypeFogDirector>();
+            }
+
+            fogDirector.gameObject.name = "Prototype Distance Fog Director";
+            fogDirector.ApplyEarlyFogDefaults();
+            fogDirector.ApplyFogSettings();
+            return fogDirector;
         }
 
         private static GameObject EnsurePlayer(SevenHexTerrainFrameDebugView terrainFrame)
@@ -84,6 +119,12 @@ namespace LostForest.Phase2.Editor
             Transform cameraRoot = EnsurePlayerCamera(playerObject.transform);
             EarlyWalkThruFirstPersonController firstPersonController = GetOrAddComponent<EarlyWalkThruFirstPersonController>(playerObject);
             firstPersonController.SetCameraRoot(cameraRoot);
+            firstPersonController.SetSprintKey(KeyCode.Space);
+            PlayerTerrainMovementState terrainMovementState = GetOrAddComponent<PlayerTerrainMovementState>(playerObject);
+            firstPersonController.SetPlayerTerrainMovementState(terrainMovementState);
+            FirstPersonCameraWalkBob walkBob = GetOrAddComponent<FirstPersonCameraWalkBob>(playerObject);
+            walkBob.SetCameraRoot(cameraRoot);
+            walkBob.SetSources(firstPersonController, terrainMovementState);
 
             EarlyWalkThruCenterSpawn centerSpawn = GetOrAddComponent<EarlyWalkThruCenterSpawn>(playerObject);
             centerSpawn.SetTerrainFrame(terrainFrame);

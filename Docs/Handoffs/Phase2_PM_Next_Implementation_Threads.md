@@ -4,6 +4,46 @@
 
 2026-07-05
 
+## Current PM Update
+
+Review update: 2026-07-20
+
+The next major Phase 2 leg should be player-centered fog / active visibility, not another board-facing construction view.
+
+Important new canon:
+
+- Hidden Slots and Tiles remain the authoritative structure for gameplay, spawning, debug, and pursuer/rune logic.
+- Player-facing visibility must be based on distance from the player, local fog density, and environmental readability.
+- Crossing a hidden Slot edge must not reveal a whole Tile or Field chunk on the horizon.
+- Active Slot rendering may still use a hidden Slot radius, but it should preload content behind fog.
+- Trees and landmarks should emerge from fog as white or gray silhouettes, then resolve into clearer low-poly forms as the player approaches.
+- Fog should be designed as a living environmental layer with uneven density and later pressure hooks.
+
+Primary architecture note:
+
+- [Phase2_Player_Centered_Fog_Visibility_Spine](../Architecture/Phase2_Player_Centered_Fog_Visibility_Spine.md)
+
+Recommended next implementation thread:
+
+- Player-Centered Fog and Active Region Rendering
+
+Primary goal:
+
+Prove that the player can move through hidden Field/Slot terrain while visual reveal remains seamless, radial, and fog-mediated rather than tile-boundary-driven.
+
+Acceptance checks:
+
+- Player current Slot is still tracked for hidden logic.
+- Active terrain/content can be loaded around the player.
+- The visible world is controlled by player-centered fog bands.
+- Newly loaded trees enter as fog silhouettes, not full-detail pop-ins.
+- Debug mode can reveal current Slot, active Slots, and render state.
+- Player-facing mode shows no Slot labels, Tile IDs, hex outlines, or board-game presentation.
+
+Practical sequencing note:
+
+Because current testing is happening on a laptop, do not chase expensive fog technology before the core loop advances. Stabilize cheap distance fog and the birch readability test enough to preserve the visual spine, then move to gameplay pressure systems such as sprint, stamina, chill/frost, rune pickup/return, and later pursuer pressure. The fog spine should remain integral, but not consume the next several milestones by itself.
+
 ## Current Verified Baseline
 
 Phase 2 is correctly positioned as a first-person 3D Unity prototype built over a hidden Frame / Slot / Tile / Field construction layer.

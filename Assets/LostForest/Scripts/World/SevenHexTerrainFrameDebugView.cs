@@ -23,10 +23,10 @@ namespace LostForest.Phase2.World
 
         [Header("Points")]
         [SerializeField] private int heightSeed = 4242;
-        [SerializeField] private float heightAmplitudeMeters = 26f;
-        [SerializeField] private float visualHeightMultiplier = 1.45f;
-        [SerializeField] private float broadHeightScale = 0.012f;
-        [SerializeField] private float noiseHeightScale = 0.024f;
+        [SerializeField] private float heightAmplitudeMeters = 42f;
+        [SerializeField] private float visualHeightMultiplier = 1.35f;
+        [SerializeField] private float broadHeightScale = 0.0034f;
+        [SerializeField] private float noiseHeightScale = 0.0022f;
         [SerializeField] private bool showCenters = true;
         [SerializeField] private bool showVertices = true;
         [SerializeField] private bool showEdgeMidpoints = true;
@@ -202,7 +202,8 @@ namespace LostForest.Phase2.World
                 heightAmplitudeMeters,
                 visualHeightMultiplier,
                 broadHeightScale,
-                noiseHeightScale);
+                noiseHeightScale,
+                Vector3.zero);
         }
 
         private HexTerrainMeshSettings CreateTerrainMeshSettings()
@@ -357,6 +358,9 @@ namespace LostForest.Phase2.World
             builder.AppendLine($"Height seed\t{settings.HeightSeed}");
             builder.AppendLine($"Height amplitude\t{settings.HeightAmplitudeMeters:0.##}m");
             builder.AppendLine($"Visual height multiplier\t{settings.VisualHeightMultiplier:0.##}x");
+            builder.AppendLine($"Broad height scale\t{settings.BroadHeightScale:0.####}");
+            builder.AppendLine($"Noise height scale\t{settings.NoiseHeightScale:0.####}");
+            builder.AppendLine($"Home world center\t({settings.HomeWorldCenter.x:0.##}, {settings.HomeWorldCenter.z:0.##})");
             builder.AppendLine($"Slots\t{frameData.SlotCount}");
             builder.AppendLine($"Local point references\t{frameData.LocalPointReferenceCount}");
             builder.AppendLine($"Unique shared points\t{frameData.SharedPointCount}");
