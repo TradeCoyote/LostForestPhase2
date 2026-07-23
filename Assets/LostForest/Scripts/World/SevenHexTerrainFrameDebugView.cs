@@ -53,6 +53,12 @@ namespace LostForest.Phase2.World
         [SerializeField] private float conformingAnchorLift = 2f;
         [SerializeField] private float conformingAnchorSize = 2.4f;
 
+        [Header("Placeholder Forest Content")]
+        [SerializeField] private bool showPlaceholderForestContent = true;
+        [SerializeField] private int placeholderContentSeed = 2026;
+        [SerializeField, Range(0, 5)] private int placeholderContentOrientationIndex = 1;
+        [SerializeField] private bool showPlaceholderContentLabels = true;
+
         [Header("Colors")]
         [SerializeField] private Color outlineColor = new Color(0.15f, 0.55f, 1f, 1f);
         [SerializeField] private Color interiorLineColor = new Color(0.55f, 0.85f, 1f, 0.75f);
@@ -61,6 +67,10 @@ namespace LostForest.Phase2.World
         [SerializeField] private Color edgeMidpointColor = new Color(0.25f, 1f, 0.55f, 1f);
         [SerializeField] private Color innerPointColor = new Color(0.86f, 0.48f, 1f, 1f);
         [SerializeField] private Color conformingTileAnchorColor = new Color(1f, 0.62f, 0.08f, 1f);
+        [SerializeField] private Color placeholderTreeTrunkColor = new Color(0.42f, 0.43f, 0.39f, 1f);
+        [SerializeField] private Color placeholderTreeSnowCapColor = new Color(0.88f, 0.93f, 0.95f, 1f);
+        [SerializeField] private Color placeholderHomeTreeColor = new Color(0.58f, 0.50f, 0.34f, 1f);
+        [SerializeField] private Color placeholderThreatTreeColor = new Color(0.13f, 0.14f, 0.15f, 1f);
 
         private TerrainFrameData terrainFrameData;
         private HexTerrainMeshData terrainMeshData;
@@ -68,7 +78,13 @@ namespace LostForest.Phase2.World
         public float HexFlatToFlatMeters => Mathf.Max(1f, hexFlatToFlatMeters);
         public float HexOuterRadiusMeters => HexFlatToFlatMeters / SqrtThree;
         public TerrainFrameData TerrainFrameData => terrainFrameData;
+        public HexTerrainMeshData TerrainMeshData => terrainMeshData;
         public IReadOnlyDictionary<string, SharedHeightPoint> SharedPoints => terrainFrameData == null ? EmptySharedPoints : terrainFrameData.SharedPoints;
+
+        public TerrainSurfaceSampler CreateTerrainSurfaceSampler()
+        {
+            return new TerrainSurfaceSampler(terrainFrameData, terrainMeshData);
+        }
 
         public void ApplyEarlyWalkThruVisualDefaults()
         {
@@ -85,6 +101,8 @@ namespace LostForest.Phase2.World
             showCenterLabels = false;
             showPointLabels = false;
             showConformingTileAnchors = false;
+            showPlaceholderForestContent = true;
+            showPlaceholderContentLabels = false;
         }
 
         private void Start()
@@ -122,6 +140,11 @@ namespace LostForest.Phase2.World
             if (showConformingTileAnchors)
             {
                 BuildConformingTileAnchorProof();
+            }
+
+            if (showPlaceholderForestContent)
+            {
+                BuildPlaceholderForestContent();
             }
 
             Debug.Log(BuildHeightPointReport(terrainFrameData));
@@ -309,6 +332,88 @@ namespace LostForest.Phase2.World
                 labelSize);
         }
 
+        private void BuildPlaceholderForestContent()
+        {
+            if (terrainFrameData == null)
+            {
+                return;
+            }
+
+            Transform contentRoot = new GameObject("Placeholder Tile Forest Content").transform;
+            contentRoot.SetParent(transform, false);
+
+            Material trunkMaterial = CreatePointMaterial("Placeholder Birch Trunk Material", placeholderTreeTrunkColor);
+            Material crownMaterial = CreatePointMaterial("Placeholder Snow Cap Material", placeholderTreeSnowCapColor);
+            Material homeTrunkMaterial = CreatePointMaterial("Placeholder Home Trunk Material", placeholderHomeTreeColor);
+            Material threatTrunkMaterial = CreatePointMaterial("Placeholder Threat Trunk Material", placeholderThreatTreeColor);
+            TileDefinitionRegistry registry = new TileDefinitionRegistry(terrainFrameData.Settings.HexOuterRadiusMeters);
+            TileContentSpawner spawner = new TileContentSpawner(trunkMaterial, crownMaterial, homeTrunkMaterial, threatTrunkMaterial);
+            TerrainSurfaceSampler surfaceSampler = CreateTerrainSurfaceSampler();
+            int totalTrees = 0;
+            int totalGroundedTrees = 0;
+            int totalSkippedTrees = 0;
+
+            for (int i = 0; i < terrainFrameData.Slots.Count; i++)
+            {
+                TerrainSlotData slot = terrainFrameData.Slots[i];
+                int tileId = GetPrototypeTileId(slot, i);
+                TileDefinition definition = registry.GetDefinition(tileId);
+                int orientationIndex = GetPrototypeOrientation(slot, i);
+                int spawnedCount = spawner.SpawnForestStandIns(
+                    contentRoot,
+                    slot,
+                    definition,
+                    surfaceSampler,
+                    placeholderContentSeed,
+                    orientationIndex,
+                    terrainFrameData.Settings.HexOuterRadiusMeters,
+                    out int groundedCount,
+                    out int skippedCount);
+
+                totalTrees += spawnedCount;
+                totalGroundedTrees += groundedCount;
+                totalSkippedTrees += skippedCount;
+
+                if (showPlaceholderContentLabels)
+                {
+                    CreateLabel(
+                        contentRoot,
+                        $"Placeholder Content Label {slot.Label}",
+                        $"{slot.Label}\nTile {definition.TileIdLabel}\n{definition.ContentCategory}\nTrees {spawnedCount}\nO{orientationIndex}",
+                        slot.CenterPoint.Position + Vector3.up * (labelLift + 7f),
+                        placeholderTreeTrunkColor,
+                        labelSize * 0.62f);
+                }
+            }
+
+            Debug.Log($"Lost Forest Phase 2 placeholder forest content: Seed={placeholderContentSeed}, Slots={terrainFrameData.Slots.Count}, Trees={totalTrees}, GroundedTrees={totalGroundedTrees}, SkippedTrees={totalSkippedTrees}, Orientation={placeholderContentOrientationIndex}/{placeholderContentOrientationIndex * 60}deg, {surfaceSampler.BuildStatsSummary("Tree grounding")}");
+        }
+
+        private static int GetPrototypeTileId(TerrainSlotData slot, int slotIndex)
+        {
+            if (slot.AxialCoordinate == Vector2Int.zero)
+            {
+                return FrameSettings.PlayerHomeTileId;
+            }
+
+            if (slot.AxialCoordinate == new Vector2Int(1, 0))
+            {
+                return FrameSettings.PursuerTileId;
+            }
+
+            return 10 + slotIndex;
+        }
+
+        private int GetPrototypeOrientation(TerrainSlotData slot, int slotIndex)
+        {
+            if (slot.AxialCoordinate == Vector2Int.zero)
+            {
+                return 0;
+            }
+
+            return Mathf.Abs(placeholderContentOrientationIndex + slotIndex) % 6;
+        }
+
         private bool ShouldShowPointKind(TerrainPointKind kind)
         {
             switch (kind)
@@ -384,6 +489,9 @@ namespace LostForest.Phase2.World
             builder.AppendLine($"Terrain collider validation\t{GetTerrainColliderValidationLine()}");
             builder.AppendLine($"Tile conformity proof\t{(showConformingTileAnchors ? "Enabled" : "Disabled")}");
             builder.AppendLine($"Conforming tile orientation\t{conformingTileOrientationIndex} / {conformingTileOrientationIndex * 60} deg");
+            builder.AppendLine($"Placeholder forest content\t{(showPlaceholderForestContent ? "Enabled" : "Disabled")}");
+            builder.AppendLine($"Placeholder content seed\t{placeholderContentSeed}");
+            builder.AppendLine($"Placeholder content orientation\t{placeholderContentOrientationIndex} / {placeholderContentOrientationIndex * 60} deg");
 
             if (sampleSharedPoint != null)
             {

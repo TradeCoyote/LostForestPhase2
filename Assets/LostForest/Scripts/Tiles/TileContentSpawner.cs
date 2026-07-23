@@ -40,6 +40,31 @@ namespace LostForest.Phase2.Tiles
             int worldSeed,
             int orientationIndex,
             float hexOuterRadiusMeters,
+            out int groundedCount,
+            out int skippedCount)
+        {
+            return SpawnForestStandIns(
+                parent,
+                slot,
+                definition,
+                surfaceSampler,
+                worldSeed,
+                orientationIndex,
+                hexOuterRadiusMeters,
+                null,
+                null,
+                out groundedCount,
+                out skippedCount);
+        }
+
+        public int SpawnForestStandIns(
+            Transform parent,
+            TerrainSlotData slot,
+            TileDefinition definition,
+            TerrainSurfaceSampler surfaceSampler,
+            int worldSeed,
+            int orientationIndex,
+            float hexOuterRadiusMeters,
             RuneManager runeManager,
             FieldSlotData fieldSlot,
             out int groundedCount,
