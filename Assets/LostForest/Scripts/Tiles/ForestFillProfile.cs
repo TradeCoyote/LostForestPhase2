@@ -60,6 +60,11 @@ namespace LostForest.Phase2.Tiles
             return new ForestFillProfile(seedSalt, 8, 8f, 6f, 4f, new Vector2(10f, 18f), new Vector2(0.55f, 1.15f));
         }
 
+        public static ForestFillProfile CreateLandmarkPrototype(int seedSalt)
+        {
+            return new ForestFillProfile(seedSalt, 4, 9f, 15f, 6f, new Vector2(8f, 15f), new Vector2(0.48f, 1f));
+        }
+
         private static Vector2 SortRange(Vector2 range, Vector2 fallback)
         {
             if (range.x <= 0f && range.y <= 0f)

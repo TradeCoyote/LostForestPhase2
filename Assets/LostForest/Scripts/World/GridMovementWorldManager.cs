@@ -351,9 +351,10 @@ namespace LostForest.Phase2.World
             string pursuerAddress = PursuerOriginSlot == null ? "None" : PursuerOriginSlot.Address;
             int activeRadius = activeRegionRenderer == null ? 0 : activeRegionRenderer.ActiveRadius;
             int activeSlots = activeRegionRenderer == null ? 0 : activeRegionRenderer.ActiveRenderedSlotCount;
+            int activeLandmarkTiles = activeRegionRenderer == null ? 0 : activeRegionRenderer.ActiveRenderedLandmarkTileCount;
             bool travelLogActive = playerFieldTravelLog != null;
             string neededRunes = runeManager == null ? "None" : runeManager.NeededRunesDebugText;
-            return $"Lost Forest Grid Movement World initialized: Field={FieldData.Rows}x{FieldData.Columns}, Seed={FieldData.Seed}, Home={homeAddress}, PursuerOrigin={pursuerAddress}, ActiveRadius={activeRadius}, ActiveSlots={activeSlots}, TravelLogActive={travelLogActive}, NeededRunes={neededRunes}";
+            return $"Lost Forest Grid Movement World initialized: Field={FieldData.Rows}x{FieldData.Columns}, Seed={FieldData.Seed}, Home={homeAddress}, PursuerOrigin={pursuerAddress}, LandmarkTiles={FieldData.LandmarkTileCount}, LandmarkTakeoverChance={frameSettings.LandmarkTileTakeoverChance * 100f:0.#}%, ActiveRadius={activeRadius}, ActiveSlots={activeSlots}, ActiveLandmarkTiles={activeLandmarkTiles}, TravelLogActive={travelLogActive}, NeededRunes={neededRunes}";
         }
 
         private static float GetControllerFootToTransformOffset(CharacterController characterController)

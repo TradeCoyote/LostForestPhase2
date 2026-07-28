@@ -14,6 +14,7 @@ namespace LostForest.Phase2.World
         [SerializeField] private int tileId;
         [SerializeField] private int orientationIndex;
         [SerializeField] private FieldSlotRole role;
+        [SerializeField] private bool landmarkTile;
         [SerializeField] private Vector3 worldCenter;
         [SerializeField] private int[] neighborIndices = { -1, -1, -1, -1, -1, -1 };
 
@@ -25,7 +26,8 @@ namespace LostForest.Phase2.World
             Vector3 worldCenter,
             int tileId,
             int orientationIndex,
-            FieldSlotRole role)
+            FieldSlotRole role,
+            bool landmarkTile = false)
         {
             this.address = address;
             this.rowIndex = rowIndex;
@@ -36,6 +38,7 @@ namespace LostForest.Phase2.World
             this.tileId = tileId;
             this.orientationIndex = Mathf.Clamp(orientationIndex, 0, 5);
             this.role = role;
+            this.landmarkTile = landmarkTile && role == FieldSlotRole.Field;
         }
 
         public string Address => address;
@@ -50,6 +53,7 @@ namespace LostForest.Phase2.World
         public int OrientationIndex => orientationIndex;
         public float OrientationDegrees => orientationIndex * 60f;
         public FieldSlotRole Role => role;
+        public bool IsLandmarkTile => landmarkTile;
 
         public int GetNeighborIndex(HexDirection direction)
         {

@@ -30,6 +30,23 @@ namespace LostForest.Phase2.World
         public IReadOnlyList<FieldSlotData> Slots => slots;
         public int SlotsFilled => slots.Count;
         public int TilesRemaining => Mathf.Max(0, tileBankSize - slots.Count);
+        public int LandmarkTileCount
+        {
+            get
+            {
+                int count = 0;
+
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    if (slots[i] != null && slots[i].IsLandmarkTile)
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+        }
 
         public FieldSlotData GetSlot(int row, int column)
         {
@@ -63,9 +80,10 @@ namespace LostForest.Phase2.World
             builder.AppendLine($"Columns\t{columns}");
             builder.AppendLine($"Slots Filled\t{SlotsFilled}");
             builder.AppendLine($"Tiles Remaining\t{TilesRemaining}");
+            builder.AppendLine($"Landmark Tiles\t{LandmarkTileCount}");
             builder.AppendLine($"Seed\t{seed}");
             builder.AppendLine();
-            builder.AppendLine("Slot\tRow\tColumn\tAxialQ\tAxialR\tTile\tOrientationIndex\tOrientationDegrees\tRole");
+            builder.AppendLine("Slot\tRow\tColumn\tAxialQ\tAxialR\tTile\tOrientationIndex\tOrientationDegrees\tRole\tLandmarkTile");
 
             for (int i = 0; i < slots.Count; i++)
             {
@@ -87,6 +105,8 @@ namespace LostForest.Phase2.World
                 builder.Append(slot.OrientationDegrees.ToString("0"));
                 builder.Append('\t');
                 builder.Append(slot.Role);
+                builder.Append('\t');
+                builder.Append(slot.IsLandmarkTile ? "Yes" : "No");
                 builder.AppendLine();
             }
 

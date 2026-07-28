@@ -37,6 +37,11 @@ namespace LostForest.Phase2.World
         [SerializeField] private bool showHomeStones = true;
         [SerializeField] private float homeStoneEmbedMeters = 0.08f;
 
+        [Header("Landmark Tiles")]
+        [SerializeField] private bool showLandmarkTiles = true;
+        [SerializeField] private int landmarkPlacementSeed = 1907;
+        [SerializeField] private bool logLandmarkPlacement = true;
+
         [Header("Rune Prototype")]
         [SerializeField] private RuneManager runeManager;
 
@@ -47,6 +52,12 @@ namespace LostForest.Phase2.World
         [SerializeField] private Color placeholderThreatTreeColor = new Color(0.13f, 0.14f, 0.15f, 1f);
         [SerializeField] private Color placeholderBarkBandColor = new Color(0.045f, 0.047f, 0.045f, 1f);
         [SerializeField] private Color homeStoneColor = Color.black;
+        [SerializeField] private Color landmarkWhiteStoneColor = new Color(0.96f, 0.97f, 0.96f, 1f);
+        [SerializeField] private Color landmarkVeryLightStoneColor = new Color(0.82f, 0.84f, 0.82f, 1f);
+        [SerializeField] private Color landmarkLightStoneColor = new Color(0.64f, 0.66f, 0.64f, 1f);
+        [SerializeField] private Color landmarkMediumStoneColor = new Color(0.42f, 0.44f, 0.43f, 1f);
+        [SerializeField] private Color landmarkDarkStoneColor = new Color(0.06f, 0.065f, 0.06f, 1f);
+        [SerializeField] private Color landmarkTotemColor = new Color(0.54f, 0.56f, 0.52f, 1f);
 
         private readonly Dictionary<string, RenderedSlotInstance> renderedSlots = new Dictionary<string, RenderedSlotInstance>();
 
@@ -61,10 +72,18 @@ namespace LostForest.Phase2.World
         private Material threatTrunkMaterial;
         private Material barkBandMaterial;
         private Material homeStoneMaterial;
+        private Material landmarkWhiteStoneMaterial;
+        private Material landmarkVeryLightStoneMaterial;
+        private Material landmarkLightStoneMaterial;
+        private Material landmarkMediumStoneMaterial;
+        private Material landmarkDarkStoneMaterial;
+        private Material landmarkTotemMaterial;
         private FieldSlotData homeSlot;
 
         public int ActiveRadius => Mathf.Max(0, activeRadius);
         public int ActiveRenderedSlotCount => renderedSlots.Count;
+        public int ActiveRenderedLandmarkTileCount => CountActiveRenderedLandmarkTiles();
+        public int ActiveLandmarkInstanceCount => CountActiveLandmarkInstances();
         public FieldSlotData CurrentCenterSlot { get; private set; }
         public IReadOnlyDictionary<string, RenderedSlotInstance> RenderedSlots => renderedSlots;
 
@@ -204,6 +223,40 @@ namespace LostForest.Phase2.World
             return true;
         }
 
+        public bool TryGetNearestLandmarkDebug(Vector3 worldPosition, out string debugText)
+        {
+            LandmarkInstance nearest = null;
+            float nearestDistanceSqr = float.PositiveInfinity;
+
+            foreach (KeyValuePair<string, RenderedSlotInstance> entry in renderedSlots)
+            {
+                LandmarkInstance landmarkInstance = entry.Value == null ? null : entry.Value.LandmarkInstance;
+
+                if (landmarkInstance == null)
+                {
+                    continue;
+                }
+
+                Vector3 delta = landmarkInstance.DebugWorldPosition - worldPosition;
+                float distanceSqr = delta.sqrMagnitude;
+
+                if (distanceSqr < nearestDistanceSqr)
+                {
+                    nearestDistanceSqr = distanceSqr;
+                    nearest = landmarkInstance;
+                }
+            }
+
+            if (nearest == null)
+            {
+                debugText = "None";
+                return false;
+            }
+
+            debugText = nearest.BuildDebugSummary(Mathf.Sqrt(nearestDistanceSqr));
+            return true;
+        }
+
         public void ClearRenderedSlots()
         {
             List<string> addresses = new List<string>(renderedSlots.Keys);
@@ -243,7 +296,7 @@ namespace LostForest.Phase2.World
 
         private RenderedSlotInstance CreateRenderedSlot(FieldSlotData fieldSlot, int distanceFromCenter)
         {
-            GameObject slotObject = new GameObject($"Rendered Slot {fieldSlot.Address} Tile {fieldSlot.TileIdLabel}");
+            GameObject slotObject = new GameObject($"Rendered Slot {fieldSlot.Address} Tile {fieldSlot.TileIdLabel}{(fieldSlot.IsLandmarkTile ? " Landmark" : string.Empty)}");
             slotObject.transform.SetParent(slotRoot, false);
 
             TerrainFrameData terrainFrameData = TerrainFrameGenerator.GenerateForFieldSlots(CreateTerrainFrameSettings(), new[] { fieldSlot });
@@ -273,7 +326,47 @@ namespace LostForest.Phase2.World
                 Debug.Log($"Lost Forest Home Landmark active slot render: Succeeded={placedHomeStones}, Slot={fieldSlot.Address}, Tile={fieldSlot.TileIdLabel}, GroundedStones={groundedStoneCount}, SkippedStones={skippedStoneCount}");
             }
 
-            return new RenderedSlotInstance(fieldSlot, terrainFrameData, terrainSlot, slotObject, terrainMeshData, surfaceSampler, distanceFromCenter);
+            LandmarkInstance landmarkInstance = terrainSlot == null ? null : SpawnLandmarkTile(slotObject.transform, fieldSlot, terrainSlot, surfaceSampler);
+
+            return new RenderedSlotInstance(fieldSlot, terrainFrameData, terrainSlot, slotObject, terrainMeshData, surfaceSampler, distanceFromCenter, landmarkInstance);
+        }
+
+        private LandmarkInstance SpawnLandmarkTile(
+            Transform parent,
+            FieldSlotData fieldSlot,
+            TerrainSlotData terrainSlot,
+            TerrainSurfaceSampler surfaceSampler)
+        {
+            if (!showLandmarkTiles || fieldSlot == null || !fieldSlot.IsLandmarkTile || IsHomeSlot(fieldSlot))
+            {
+                return null;
+            }
+
+            if (!LandmarkPlacementManager.TryCreatePlacementPlan(
+                    fieldSlot,
+                    terrainSlot,
+                    surfaceSampler,
+                    GetLandmarkWorldSeed(),
+                    hexOuterRadiusMeters,
+                    out LandmarkPlacementPlan plan,
+                    out string skipReason))
+            {
+                if (logLandmarkPlacement)
+                {
+                    Debug.Log($"Lost Forest Landmark tile skipped: Slot={fieldSlot.Address}, Tile={fieldSlot.TileIdLabel}, Reason={skipReason}");
+                }
+
+                return null;
+            }
+
+            LandmarkInstance landmarkInstance = LandmarkPrototypeFactory.SpawnPrototype(parent, plan, surfaceSampler, CreateLandmarkMaterials());
+
+            if (logLandmarkPlacement && landmarkInstance != null)
+            {
+                Debug.Log($"Lost Forest Landmark tile spawned: Type={landmarkInstance.DisplayName}, Slot={fieldSlot.Address}, Tile={fieldSlot.TileIdLabel}, Position=({landmarkInstance.DebugWorldPosition.x:0.00}, {landmarkInstance.DebugWorldPosition.y:0.00}, {landmarkInstance.DebugWorldPosition.z:0.00}), Slope={plan.SurfaceSample.SlopeDegrees:0.0}deg, Seed={plan.PlacementSeed}");
+            }
+
+            return landmarkInstance;
         }
 
         private void SpawnPlaceholderContent(
@@ -295,7 +388,7 @@ namespace LostForest.Phase2.World
             Transform contentRoot = new GameObject($"Slot {fieldSlot.Address} Placeholder Tile Content").transform;
             contentRoot.SetParent(parent, false);
 
-            TileDefinition definition = tileDefinitionRegistry.GetDefinition(fieldSlot.TileId);
+            TileDefinition definition = tileDefinitionRegistry.GetDefinition(fieldSlot);
             int spawnedCount = tileContentSpawner.SpawnForestStandIns(
                 contentRoot,
                 terrainSlot,
@@ -357,6 +450,14 @@ namespace LostForest.Phase2.World
             unchecked
             {
                 return ((fieldData == null ? 0 : fieldData.Seed) * 397) ^ placeholderContentSeed;
+            }
+        }
+
+        private int GetLandmarkWorldSeed()
+        {
+            unchecked
+            {
+                return ((fieldData == null ? 0 : fieldData.Seed) * 397) ^ landmarkPlacementSeed;
             }
         }
 
@@ -428,7 +529,38 @@ namespace LostForest.Phase2.World
 
         private string BuildRenderUpdateLog(FieldSlotData centerSlot, int addedCount, int removedCount)
         {
-            return $"Lost Forest Active Grid Render: Center={centerSlot.Address}, Row={centerSlot.RowIndex}, Column={centerSlot.ColumnIndex}, Axial=({centerSlot.AxialQ}, {centerSlot.AxialR}), Tile={centerSlot.TileIdLabel}, Orientation=O{centerSlot.OrientationIndex}/{centerSlot.OrientationDegrees:0}deg, Radius={ActiveRadius}, ActiveSlots={renderedSlots.Count}, Added={addedCount}, Removed={removedCount}";
+            string centerLandmarkTile = centerSlot.IsLandmarkTile ? "Yes" : "No";
+            return $"Lost Forest Active Grid Render: Center={centerSlot.Address}, Row={centerSlot.RowIndex}, Column={centerSlot.ColumnIndex}, Axial=({centerSlot.AxialQ}, {centerSlot.AxialR}), Tile={centerSlot.TileIdLabel}, LandmarkTile={centerLandmarkTile}, Orientation=O{centerSlot.OrientationIndex}/{centerSlot.OrientationDegrees:0}deg, Radius={ActiveRadius}, ActiveSlots={renderedSlots.Count}, ActiveLandmarkTiles={ActiveRenderedLandmarkTileCount}, ActiveLandmarks={ActiveLandmarkInstanceCount}, Added={addedCount}, Removed={removedCount}";
+        }
+
+        private int CountActiveRenderedLandmarkTiles()
+        {
+            int count = 0;
+
+            foreach (KeyValuePair<string, RenderedSlotInstance> entry in renderedSlots)
+            {
+                if (entry.Value != null && entry.Value.IsLandmarkTile)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private int CountActiveLandmarkInstances()
+        {
+            int count = 0;
+
+            foreach (KeyValuePair<string, RenderedSlotInstance> entry in renderedSlots)
+            {
+                if (entry.Value != null && entry.Value.LandmarkInstance != null)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private void EnsureSlotRoot()
@@ -460,6 +592,25 @@ namespace LostForest.Phase2.World
             threatTrunkMaterial = threatTrunkMaterial == null ? CreateMaterial("Active Grid Threat Trunk Material", placeholderThreatTreeColor) : threatTrunkMaterial;
             barkBandMaterial = barkBandMaterial == null ? CreateMaterial("Active Grid Birch Bark Band Material", placeholderBarkBandColor) : barkBandMaterial;
             homeStoneMaterial = homeStoneMaterial == null ? CreateMaterial("Active Grid Home Stone Material", homeStoneColor) : homeStoneMaterial;
+            landmarkWhiteStoneMaterial = landmarkWhiteStoneMaterial == null ? CreateMaterial("Landmark White Stone Material", landmarkWhiteStoneColor) : landmarkWhiteStoneMaterial;
+            landmarkVeryLightStoneMaterial = landmarkVeryLightStoneMaterial == null ? CreateMaterial("Landmark Very Light Stone Material", landmarkVeryLightStoneColor) : landmarkVeryLightStoneMaterial;
+            landmarkLightStoneMaterial = landmarkLightStoneMaterial == null ? CreateMaterial("Landmark Light Stone Material", landmarkLightStoneColor) : landmarkLightStoneMaterial;
+            landmarkMediumStoneMaterial = landmarkMediumStoneMaterial == null ? CreateMaterial("Landmark Medium Stone Material", landmarkMediumStoneColor) : landmarkMediumStoneMaterial;
+            landmarkDarkStoneMaterial = landmarkDarkStoneMaterial == null ? CreateMaterial("Landmark Dark Stone Material", landmarkDarkStoneColor) : landmarkDarkStoneMaterial;
+            landmarkTotemMaterial = landmarkTotemMaterial == null ? CreateMaterial("Landmark Totem Material", landmarkTotemColor) : landmarkTotemMaterial;
+        }
+
+        private LandmarkPrototypeFactory.Materials CreateLandmarkMaterials()
+        {
+            return new LandmarkPrototypeFactory.Materials(
+                landmarkWhiteStoneMaterial,
+                landmarkVeryLightStoneMaterial,
+                landmarkLightStoneMaterial,
+                landmarkMediumStoneMaterial,
+                landmarkDarkStoneMaterial,
+                trunkMaterial,
+                barkBandMaterial,
+                landmarkTotemMaterial);
         }
 
         private static Material CreateMaterial(string name, Color color)

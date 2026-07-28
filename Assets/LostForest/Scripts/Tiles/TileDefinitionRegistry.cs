@@ -6,6 +6,7 @@ namespace LostForest.Phase2.Tiles
     public sealed class TileDefinitionRegistry
     {
         private readonly Dictionary<int, TileDefinition> definitions = new Dictionary<int, TileDefinition>();
+        private readonly Dictionary<int, TileDefinition> landmarkDefinitions = new Dictionary<int, TileDefinition>();
         private readonly float hexOuterRadiusMeters;
 
         public TileDefinitionRegistry(float hexOuterRadiusMeters)
@@ -15,6 +16,7 @@ namespace LostForest.Phase2.Tiles
         }
 
         public IReadOnlyDictionary<int, TileDefinition> Definitions => definitions;
+        public IReadOnlyDictionary<int, TileDefinition> LandmarkDefinitions => landmarkDefinitions;
 
         public TileDefinition GetDefinition(int tileId)
         {
@@ -28,9 +30,25 @@ namespace LostForest.Phase2.Tiles
             return definition;
         }
 
+        public TileDefinition GetDefinition(FieldSlotData slot)
+        {
+            if (slot == null)
+            {
+                return null;
+            }
+
+            return slot.IsLandmarkTile ? GetLandmarkDefinition(slot.TileId) : GetDefinition(slot.TileId);
+        }
+
         public bool TryGetDefinition(int tileId, out TileDefinition definition)
         {
             return definitions.TryGetValue(tileId, out definition);
+        }
+
+        public bool TryGetDefinition(FieldSlotData slot, out TileDefinition definition)
+        {
+            definition = GetDefinition(slot);
+            return definition != null;
         }
 
         private void RegisterPrototypeDefinitions()
@@ -77,6 +95,33 @@ namespace LostForest.Phase2.Tiles
                 new[] { "prototype-content-anchor-test", "field-content-placeholder" },
                 true,
                 CreatePrototypeForestFill(tileId),
+                TileConstructionAnchors.CreatePrototypeHexAnchors(hexOuterRadiusMeters));
+        }
+
+        private TileDefinition GetLandmarkDefinition(int tileId)
+        {
+            if (landmarkDefinitions.TryGetValue(tileId, out TileDefinition definition))
+            {
+                return definition;
+            }
+
+            definition = CreateLandmarkDefinition(tileId);
+            landmarkDefinitions.Add(definition.TileId, definition);
+            return definition;
+        }
+
+        private TileDefinition CreateLandmarkDefinition(int tileId)
+        {
+            return new TileDefinition(
+                tileId,
+                $"Prototype Landmark Tile {tileId:D3}",
+                TileReservedRole.None,
+                TileContentCategory.Landmark,
+                true,
+                new[] { "prototype-terrain-placeholder", "field-placeholder", "landmark-tile-placeholder" },
+                new[] { "prototype-content-anchor-test", "field-content-placeholder", "landmark-content-placeholder" },
+                true,
+                ForestFillProfile.CreateLandmarkPrototype(tileId),
                 TileConstructionAnchors.CreatePrototypeHexAnchors(hexOuterRadiusMeters));
         }
 

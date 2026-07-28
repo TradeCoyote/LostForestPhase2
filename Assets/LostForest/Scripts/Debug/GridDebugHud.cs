@@ -8,7 +8,9 @@ namespace LostForest.Phase2.Debugging
 {
     public sealed class GridDebugHud : MonoBehaviour
     {
-        private const string CameraHudObjectName = "Grid Debug Camera Text";
+        private const string CameraHudObjectName = "Grid Debug Camera Panel";
+        private const string CameraHudTextObjectName = "Grid Debug Camera Text";
+        private const string CameraHudBackingObjectName = "Grid Debug Camera Backing";
 
         [SerializeField] private PlayerGridAddressTracker gridAddressTracker;
         [SerializeField] private PlayerCondition playerCondition;
@@ -17,13 +19,26 @@ namespace LostForest.Phase2.Debugging
         [SerializeField] private RuneManager runeManager;
         [SerializeField] private Camera targetCamera;
         [SerializeField] private bool showHud = true;
-        [SerializeField] private int fontSize = 36;
-        [SerializeField] private float characterSize = 0.0045f;
-        [SerializeField] private Vector3 cameraLocalPosition = new Vector3(0.46f, 0.27f, 1.55f);
-        [SerializeField] private Color textColor = new Color(0.035f, 0.045f, 0.05f, 1f);
+        [SerializeField] private float cameraOverlayDistance = 0.9f;
+        [SerializeField, Range(0f, 0.25f)] private float viewportInsetX = 0.045f;
+        [SerializeField, Range(0f, 0.25f)] private float viewportInsetY = 0.06f;
+        [SerializeField, Range(0.15f, 0.95f)] private float panelViewportWidth = 0.34f;
+        [SerializeField, Range(0.15f, 0.95f)] private float panelViewportHeight = 0.84f;
+        [SerializeField, Range(0.01f, 0.12f)] private float textInsetViewport = 0.025f;
+        [SerializeField] private Color textColor = new Color(1f, 0f, 0.75f, 1f);
+        [SerializeField] private Color backingColor = new Color(0.92f, 0.97f, 1f, 0.92f);
 
-        private TextMesh hudText;
+        private Transform hudRoot;
+        private GridDebugMeshText hudText;
+        private Renderer backingRenderer;
+        private Material backingMaterial;
         private bool loggedScene;
+        private bool loggedHudGeometry;
+
+        private void Awake()
+        {
+            ApplyCompactDefaults();
+        }
 
         public void SetSources(PlayerGridAddressTracker newGridAddressTracker, ActiveRegionRenderer newActiveRegionRenderer)
         {
@@ -53,17 +68,18 @@ namespace LostForest.Phase2.Debugging
 
         public void ApplyCompactDefaults()
         {
-            fontSize = 36;
-            characterSize = 0.0045f;
-            cameraLocalPosition = new Vector3(0.46f, 0.27f, 1.55f);
-            textColor = new Color(0.035f, 0.045f, 0.05f, 1f);
+            cameraOverlayDistance = 0.9f;
+            viewportInsetX = 0.045f;
+            viewportInsetY = 0.06f;
+            panelViewportWidth = 0.34f;
+            panelViewportHeight = 0.84f;
+            textInsetViewport = 0.025f;
+            textColor = new Color(1f, 0f, 0.75f, 1f);
+            backingColor = new Color(0.92f, 0.97f, 1f, 0.92f);
 
             if (hudText != null)
             {
-                hudText.transform.localPosition = cameraLocalPosition;
-                hudText.fontSize = fontSize;
-                hudText.characterSize = characterSize;
-                hudText.color = textColor;
+                ConfigureHudPanel();
             }
         }
 
@@ -77,9 +93,9 @@ namespace LostForest.Phase2.Debugging
         {
             if (!showHud)
             {
-                if (hudText != null)
+                if (hudRoot != null)
                 {
-                    hudText.gameObject.SetActive(false);
+                    hudRoot.gameObject.SetActive(false);
                 }
 
                 return;
@@ -101,27 +117,210 @@ namespace LostForest.Phase2.Debugging
                 return;
             }
 
+            RemoveLegacyHudObjects();
             Transform existingHud = targetCamera.transform.Find(CameraHudObjectName);
 
             if (existingHud != null)
             {
-                hudText = existingHud.GetComponent<TextMesh>();
-                existingHud.localPosition = cameraLocalPosition;
+                hudRoot = existingHud;
+                RemoveLegacyTextMesh(hudRoot.gameObject);
+                Transform textTransform = existingHud.Find(CameraHudTextObjectName);
+
+                if (textTransform == null)
+                {
+                    textTransform = new GameObject(CameraHudTextObjectName).transform;
+                    textTransform.SetParent(existingHud, false);
+                }
+
+                RemoveLegacyTextMesh(textTransform.gameObject);
+                hudText = textTransform.GetComponent<GridDebugMeshText>();
+
+                if (hudText == null)
+                {
+                    hudText = textTransform.gameObject.AddComponent<GridDebugMeshText>();
+                }
+
+                EnsureBacking();
+                ConfigureHudPanel();
                 return;
             }
 
-            GameObject hudObject = new GameObject(CameraHudObjectName);
-            hudObject.transform.SetParent(targetCamera.transform, false);
-            hudObject.transform.localPosition = cameraLocalPosition;
-            hudObject.transform.localRotation = Quaternion.identity;
-            hudObject.transform.localScale = Vector3.one;
+            hudRoot = new GameObject(CameraHudObjectName).transform;
+            hudRoot.SetParent(targetCamera.transform, false);
 
-            hudText = hudObject.AddComponent<TextMesh>();
-            hudText.anchor = TextAnchor.UpperRight;
-            hudText.alignment = TextAlignment.Right;
-            hudText.fontSize = fontSize;
-            hudText.characterSize = characterSize;
-            hudText.color = textColor;
+            GameObject textObject = new GameObject(CameraHudTextObjectName);
+            textObject.transform.SetParent(hudRoot, false);
+            hudText = textObject.AddComponent<GridDebugMeshText>();
+
+            EnsureBacking();
+            ConfigureHudPanel();
+        }
+
+        private void ConfigureHudPanel()
+        {
+            if (hudRoot == null || hudText == null)
+            {
+                return;
+            }
+
+            Vector2 panelSize = ResolveCameraLocalPanelSize();
+            hudRoot.localPosition = ResolveCameraLocalHudPosition(panelSize);
+            hudRoot.localRotation = Quaternion.identity;
+            hudRoot.localScale = Vector3.one;
+
+            float panelWidth = panelSize.x;
+            float panelHeight = panelSize.y;
+            float insetBase = Mathf.Min(panelWidth, panelHeight);
+            float textInsetX = Mathf.Clamp(insetBase * textInsetViewport, 0.01f, panelWidth * 0.2f);
+            float textInsetY = Mathf.Clamp(insetBase * textInsetViewport, 0.01f, panelHeight * 0.2f);
+            hudText.transform.localPosition = new Vector3((-panelWidth * 0.5f) + textInsetX, (panelHeight * 0.5f) - textInsetY, -0.04f);
+            hudText.transform.localRotation = Quaternion.identity;
+            hudText.transform.localScale = Vector3.one;
+            hudText.Configure(textColor);
+
+            if (backingRenderer != null)
+            {
+                backingRenderer.enabled = true;
+                backingRenderer.sharedMaterial = GetBackingMaterial();
+                backingRenderer.sortingOrder = -10;
+                backingRenderer.transform.localPosition = new Vector3(0f, 0f, 0.04f);
+                backingRenderer.transform.localRotation = Quaternion.identity;
+                backingRenderer.transform.localScale = new Vector3(panelWidth, panelHeight, 1f);
+            }
+        }
+
+        private Vector3 ResolveCameraLocalHudPosition(Vector2 panelSize)
+        {
+            Camera camera = targetCamera == null ? Camera.main : targetCamera;
+
+            if (camera == null)
+            {
+                return new Vector3(-0.35f, 0.22f, 1f);
+            }
+
+            float distance = Mathf.Max(camera.nearClipPlane + 0.12f, cameraOverlayDistance);
+            float halfHeight = Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * distance;
+            float halfWidth = halfHeight * camera.aspect;
+            float left = -halfWidth + (halfWidth * 2f * viewportInsetX);
+            float top = halfHeight - (halfHeight * 2f * viewportInsetY);
+            float panelHalfWidth = Mathf.Min(panelSize.x * 0.5f, halfWidth * 0.95f);
+            float panelHalfHeight = Mathf.Min(panelSize.y * 0.5f, halfHeight * 0.95f);
+            float x = left + panelHalfWidth;
+            float y = top - panelHalfHeight;
+            return new Vector3(x, y, distance);
+        }
+
+        private Vector2 ResolveCameraLocalPanelSize()
+        {
+            Camera camera = targetCamera == null ? Camera.main : targetCamera;
+
+            if (camera == null)
+            {
+                return new Vector2(0.55f, 0.45f);
+            }
+
+            float distance = Mathf.Max(camera.nearClipPlane + 0.12f, cameraOverlayDistance);
+            float fullHeight = 2f * Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * distance;
+            float fullWidth = fullHeight * camera.aspect;
+            float usableWidth = fullWidth * Mathf.Clamp01(1f - (viewportInsetX * 2f));
+            float usableHeight = fullHeight * Mathf.Clamp01(1f - (viewportInsetY * 2f));
+            return new Vector2(
+                Mathf.Max(0.2f, usableWidth * panelViewportWidth),
+                Mathf.Max(0.2f, usableHeight * panelViewportHeight));
+        }
+
+        private void EnsureBacking()
+        {
+            if (hudRoot == null)
+            {
+                return;
+            }
+
+            Transform backingTransform = hudRoot.Find(CameraHudBackingObjectName);
+
+            if (backingTransform == null)
+            {
+                GameObject backingObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                backingObject.name = CameraHudBackingObjectName;
+                backingTransform = backingObject.transform;
+                backingTransform.SetParent(hudRoot, false);
+
+                Collider collider = backingObject.GetComponent<Collider>();
+
+                if (collider != null)
+                {
+                    Destroy(collider);
+                }
+            }
+
+            backingRenderer = backingTransform.GetComponent<Renderer>();
+        }
+
+        private void RemoveLegacyHudObjects()
+        {
+            if (targetCamera == null)
+            {
+                return;
+            }
+
+            Transform legacyText = targetCamera.transform.Find(CameraHudTextObjectName);
+
+            if (legacyText != null)
+            {
+                DestroyUnityObject(legacyText.gameObject);
+            }
+
+            Transform legacyPanel = targetCamera.transform.Find(CameraHudObjectName);
+
+            if (legacyPanel != null)
+            {
+                RemoveLegacyTextMesh(legacyPanel.gameObject);
+            }
+        }
+
+        private static void RemoveLegacyTextMesh(GameObject gameObject)
+        {
+            if (gameObject == null)
+            {
+                return;
+            }
+
+            TextMesh legacyText = gameObject.GetComponent<TextMesh>();
+
+            if (legacyText != null)
+            {
+                DestroyUnityObject(legacyText);
+            }
+        }
+
+        private static void DestroyUnityObject(Object objectToDestroy)
+        {
+            if (objectToDestroy == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(objectToDestroy);
+                return;
+            }
+
+            DestroyImmediate(objectToDestroy);
+        }
+
+        private Material GetBackingMaterial()
+        {
+            if (backingMaterial == null)
+            {
+                backingMaterial = new Material(Shader.Find("Sprites/Default"))
+                {
+                    name = "Grid Debug HUD Backing Material"
+                };
+            }
+
+            backingMaterial.color = backingColor;
+            return backingMaterial;
         }
 
         private string BuildGridAddressText()
@@ -140,7 +339,8 @@ namespace LostForest.Phase2.Debugging
             }
 
             TerrainElevationSample elevationSample = GetCurrentElevationSample(slot);
-            return $"Elev {elevationSample.LogicalElevationMeters:0.0} {elevationSample.ElevationBand} {elevationSample.Landform}";
+            string landmarkTile = slot.IsLandmarkTile ? " Landmark Tile" : string.Empty;
+            return $"Elev {elevationSample.LogicalElevationMeters:0.0} {elevationSample.ElevationBand} {elevationSample.Landform}{landmarkTile}";
         }
 
         private TerrainElevationSample GetCurrentElevationSample(FieldSlotData slot)
@@ -204,14 +404,21 @@ namespace LostForest.Phase2.Debugging
                 return;
             }
 
-            hudText.gameObject.SetActive(true);
-            hudText.fontSize = fontSize;
-            hudText.characterSize = characterSize;
-            hudText.color = textColor;
+            hudRoot.gameObject.SetActive(true);
+            ConfigureHudPanel();
             string movementText = BuildMovementText();
             string conditionText = BuildConditionText();
             string runeText = BuildRuneText();
-            hudText.text = $"{BuildGridAddressText()}\n{BuildElevationText()}{BuildOptionalLine(movementText)}{BuildOptionalLine(conditionText)}{BuildOptionalLine(runeText)}";
+            string landmarkText = BuildLandmarkText();
+            string text = $"{BuildGridAddressText()}\n{BuildElevationText()}{BuildOptionalLine(movementText)}{BuildOptionalLine(conditionText)}{BuildOptionalLine(runeText)}{BuildOptionalLine(landmarkText)}";
+            Vector2 textArea = ResolveCameraLocalPanelSize();
+            hudText.SetText(text, textArea * 0.88f);
+
+            if (!loggedHudGeometry)
+            {
+                loggedHudGeometry = true;
+                Debug.Log($"Lost Forest Grid Debug HUD geometry: TextLength={text.Length}, RootLocal={hudRoot.localPosition}, TextLocal={hudText.transform.localPosition}, BackingLocal={(backingRenderer == null ? Vector3.zero : backingRenderer.transform.localPosition)}, BackingScale={(backingRenderer == null ? Vector3.zero : backingRenderer.transform.localScale)}", this);
+            }
         }
 
         private void LogActiveSceneOnce()
@@ -255,6 +462,18 @@ namespace LostForest.Phase2.Debugging
             }
 
             return $"Needed: {runeManager.NeededRunesDebugText}\nCarried: {runeManager.CarriedRuneDebugText}\nDeposited: {runeManager.DepositedRunesDebugText}\nActive Rune Markers: {runeManager.ActiveMarkerCount}\nNearest Matching Rune Slot: {nearestMatchingSlot}";
+        }
+
+        private string BuildLandmarkText()
+        {
+            if (activeRegionRenderer == null)
+            {
+                return string.Empty;
+            }
+
+            Vector3 probePosition = gridAddressTracker == null ? activeRegionRenderer.transform.position : gridAddressTracker.transform.position;
+            string nearestLandmark = activeRegionRenderer.TryGetNearestLandmarkDebug(probePosition, out string debugText) ? debugText : "None";
+            return $"Landmark Tiles Active: {activeRegionRenderer.ActiveRenderedLandmarkTileCount}\nActive Landmarks: {activeRegionRenderer.ActiveLandmarkInstanceCount}\nNearest Landmark: {nearestLandmark}";
         }
 
         private string BuildConditionStateText()

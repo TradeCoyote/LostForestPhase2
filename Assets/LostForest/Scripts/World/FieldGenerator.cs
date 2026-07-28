@@ -6,6 +6,8 @@ namespace LostForest.Phase2.World
 {
     public static class FieldGenerator
     {
+        private const int LandmarkTileChancePrecision = 10000;
+
         public static FieldData Generate(FrameSettings settings)
         {
             if (settings == null)
@@ -39,6 +41,7 @@ namespace LostForest.Phase2.World
                 {
                     Vector2Int coordinate = new Vector2Int(row, column);
                     FieldSlotRole role = FieldSlotRole.Field;
+                    bool isLandmarkTile = false;
                     int tileId;
 
                     if (coordinate == playerHomeCoordinate)
@@ -56,6 +59,7 @@ namespace LostForest.Phase2.World
                         int bankIndex = random.Next(0, tileBank.Count);
                         tileId = tileBank[bankIndex];
                         tileBank.RemoveAt(bankIndex);
+                        isLandmarkTile = ShouldLandmarkTileTakeOver(settings.LandmarkTileTakeoverChance, seed, row, column, tileId);
                     }
 
                     int orientation = random.Next(0, 6);
@@ -70,12 +74,40 @@ namespace LostForest.Phase2.World
                         worldCenter,
                         tileId,
                         orientation,
-                        role));
+                        role,
+                        isLandmarkTile));
                 }
             }
 
             BuildNeighborIndices(slots, rows, columns);
             return new FieldData(rows, columns, settings.TileBankSize, seed, slots);
+        }
+
+        private static bool ShouldLandmarkTileTakeOver(float chance, int seed, int row, int column, int tileId)
+        {
+            int threshold = Mathf.RoundToInt(Mathf.Clamp01(chance) * LandmarkTileChancePrecision);
+
+            if (threshold <= 0)
+            {
+                return false;
+            }
+
+            if (threshold >= LandmarkTileChancePrecision)
+            {
+                return true;
+            }
+
+            unchecked
+            {
+                int hash = 47;
+                hash = hash * 397 + seed;
+                hash = hash * 397 + row;
+                hash = hash * 397 + column;
+                hash = hash * 397 + tileId;
+                hash ^= hash >> 16;
+                int roll = (hash & 0x7fffffff) % LandmarkTileChancePrecision;
+                return roll < threshold;
+            }
         }
 
         private static List<int> BuildTileBank(int tileBankSize)

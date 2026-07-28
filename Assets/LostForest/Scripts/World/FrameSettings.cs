@@ -18,6 +18,7 @@ namespace LostForest.Phase2.World
         [SerializeField] private int seed = 12345;
         [SerializeField] private bool useRandomSeed = true;
         [SerializeField] private float hexOuterRadiusMeters = 45f;
+        [SerializeField, Range(0f, 1f)] private float landmarkTileTakeoverChance = 0.15f;
 
         public int Rows => Mathf.Max(1, rows);
         public int Columns => Mathf.Max(1, columns);
@@ -25,6 +26,7 @@ namespace LostForest.Phase2.World
         public int Seed => seed;
         public bool UseRandomSeed => useRandomSeed;
         public float HexOuterRadiusMeters => Mathf.Max(1f, hexOuterRadiusMeters);
+        public float LandmarkTileTakeoverChance => Mathf.Clamp01(landmarkTileTakeoverChance);
 
         public static FrameSettings CreateSmallPrototype(int rows, int columns, int seed = 12345)
         {
@@ -34,7 +36,8 @@ namespace LostForest.Phase2.World
                 columns = Mathf.Max(1, columns),
                 tileBankSize = CanonicalTileBankSize,
                 seed = seed,
-                useRandomSeed = false
+                useRandomSeed = false,
+                landmarkTileTakeoverChance = 0.15f
             };
         }
     }

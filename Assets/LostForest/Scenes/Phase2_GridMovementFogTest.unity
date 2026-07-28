@@ -212,10 +212,15 @@ MonoBehaviour:
   runeManager: {fileID: 958355441}
   targetCamera: {fileID: 1803468284}
   showHud: 1
-  fontSize: 36
-  characterSize: 0.0045
-  cameraLocalPosition: {x: 0.46, y: 0.27, z: 1.55}
+  fontSize: 28
+  characterSize: 0.003
+  cameraOverlayDistance: 0.45
+  viewportInsetX: 0.045
+  viewportInsetY: 0.06
+  panelSizeMeters: {x: 0.78, y: 0.82}
+  textInsetMeters: {x: 0.055, y: 0.055}
   textColor: {r: 0.035, g: 0.045, b: 0.05, a: 1}
+  backingColor: {r: 0.92, g: 0.97, b: 1, a: 0.92}
 --- !u!114 &958355437
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -244,6 +249,9 @@ MonoBehaviour:
   placeholderContentSeed: 2026
   showHomeStones: 1
   homeStoneEmbedMeters: 0.08
+  showLandmarkTiles: 1
+  landmarkPlacementSeed: 1907
+  logLandmarkPlacement: 1
   runeManager: {fileID: 958355441}
   placeholderTreeTrunkColor: {r: 0.91, g: 0.94, b: 0.91, a: 1}
   placeholderTreeSnowCapColor: {r: 0.88, g: 0.93, b: 0.95, a: 1}
@@ -251,6 +259,12 @@ MonoBehaviour:
   placeholderThreatTreeColor: {r: 0.13, g: 0.14, b: 0.15, a: 1}
   placeholderBarkBandColor: {r: 0.045, g: 0.047, b: 0.045, a: 1}
   homeStoneColor: {r: 0, g: 0, b: 0, a: 1}
+  landmarkWhiteStoneColor: {r: 0.96, g: 0.97, b: 0.96, a: 1}
+  landmarkVeryLightStoneColor: {r: 0.82, g: 0.84, b: 0.82, a: 1}
+  landmarkLightStoneColor: {r: 0.64, g: 0.66, b: 0.64, a: 1}
+  landmarkMediumStoneColor: {r: 0.42, g: 0.44, b: 0.43, a: 1}
+  landmarkDarkStoneColor: {r: 0.06, g: 0.065, b: 0.06, a: 1}
+  landmarkTotemColor: {r: 0.54, g: 0.56, b: 0.52, a: 1}
 --- !u!114 &958355438
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -270,6 +284,7 @@ MonoBehaviour:
     seed: 12345
     useRandomSeed: 1
     hexOuterRadiusMeters: 45
+    landmarkTileTakeoverChance: 0.15
   initializeOnStart: 1
   logInitialization: 1
   player: {fileID: 2063129116}

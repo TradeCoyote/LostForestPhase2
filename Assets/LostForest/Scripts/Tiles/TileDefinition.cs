@@ -47,6 +47,7 @@ namespace LostForest.Phase2.Tiles
         public string DebugName => debugName;
         public TileReservedRole ReservedRole => reservedRole;
         public TileContentCategory ContentCategory => contentCategory;
+        public bool IsLandmarkTile => contentCategory == TileContentCategory.Landmark;
         public bool RuneEligible => runeEligible;
         public IReadOnlyList<string> TerrainTags => terrainTags;
         public IReadOnlyList<string> ContentTags => contentTags;

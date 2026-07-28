@@ -1,3 +1,4 @@
+using LostForest.Phase2.Landmarks;
 using UnityEngine;
 
 namespace LostForest.Phase2.World
@@ -13,7 +14,8 @@ namespace LostForest.Phase2.World
             GameObject root,
             HexTerrainMeshData terrainMeshData,
             TerrainSurfaceSampler surfaceSampler,
-            int distanceFromCenter)
+            int distanceFromCenter,
+            LandmarkInstance landmarkInstance = null)
         {
             FieldSlot = fieldSlot;
             TerrainFrameData = terrainFrameData;
@@ -21,6 +23,7 @@ namespace LostForest.Phase2.World
             Root = root;
             TerrainMeshData = terrainMeshData;
             this.surfaceSampler = surfaceSampler;
+            LandmarkInstance = landmarkInstance;
             SetDistanceBand(distanceFromCenter);
         }
 
@@ -29,9 +32,11 @@ namespace LostForest.Phase2.World
         public TerrainSlotData TerrainSlot { get; }
         public GameObject Root { get; }
         public HexTerrainMeshData TerrainMeshData { get; }
+        public LandmarkInstance LandmarkInstance { get; }
         public int DistanceFromCenter { get; private set; }
         public string Address => FieldSlot == null ? string.Empty : FieldSlot.Address;
         public string TileIdLabel => FieldSlot == null ? string.Empty : FieldSlot.TileIdLabel;
+        public bool IsLandmarkTile => FieldSlot != null && FieldSlot.IsLandmarkTile;
 
         public bool TrySampleSurface(Vector3 worldXzPosition, out TerrainSurfaceSample sample)
         {
