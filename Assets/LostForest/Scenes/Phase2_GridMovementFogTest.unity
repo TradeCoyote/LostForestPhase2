@@ -186,6 +186,7 @@ GameObject:
   - component: {fileID: 958355436}
   - component: {fileID: 958355440}
   - component: {fileID: 958355441}
+  - component: {fileID: 958355442}
   m_Layer: 0
   m_Name: Grid Movement World
   m_TagString: Untagged
@@ -209,18 +210,19 @@ MonoBehaviour:
   playerCondition: {fileID: 2063129117}
   playerTerrainMovementState: {fileID: 2063129119}
   activeRegionRenderer: {fileID: 958355437}
+  worldEndFrostController: {fileID: 958355442}
   runeManager: {fileID: 958355441}
   targetCamera: {fileID: 1803468284}
   showHud: 1
-  fontSize: 28
-  characterSize: 0.003
-  cameraOverlayDistance: 0.45
+  toggleHudKey: 116
+  cameraOverlayDistance: 0.9
   viewportInsetX: 0.045
   viewportInsetY: 0.06
-  panelSizeMeters: {x: 0.78, y: 0.82}
-  textInsetMeters: {x: 0.055, y: 0.055}
-  textColor: {r: 0.035, g: 0.045, b: 0.05, a: 1}
-  backingColor: {r: 0.92, g: 0.97, b: 1, a: 0.92}
+  panelViewportWidth: 0.34
+  panelViewportHeight: 0.84
+  textInsetViewport: 0.025
+  textColor: {r: 1, g: 0, b: 0.75, a: 1}
+  backingColor: {r: 0.92, g: 0.97, b: 1, a: 0}
 --- !u!114 &958355437
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -247,6 +249,10 @@ MonoBehaviour:
   noiseHeightScale: 0.0022
   showPlaceholderForestContent: 1
   placeholderContentSeed: 2026
+  showOuterFrostTiles: 1
+  outerFrostRenderRings: 3
+  showOuterFrostForestContent: 1
+  outerFrostContentSeed: 31013
   showHomeStones: 1
   homeStoneEmbedMeters: 0.08
   showLandmarkTiles: 1
@@ -258,6 +264,9 @@ MonoBehaviour:
   placeholderHomeTreeColor: {r: 0.93, g: 0.95, b: 0.9, a: 1}
   placeholderThreatTreeColor: {r: 0.13, g: 0.14, b: 0.15, a: 1}
   placeholderBarkBandColor: {r: 0.045, g: 0.047, b: 0.045, a: 1}
+  outerFrostTerrainColor: {r: 0.78, g: 0.91, b: 1, a: 1}
+  outerFrostTreeTrunkColor: {r: 0.76, g: 0.91, b: 0.98, a: 1}
+  outerFrostBarkBandColor: {r: 0.42, g: 0.58, b: 0.68, a: 1}
   homeStoneColor: {r: 0, g: 0, b: 0, a: 1}
   landmarkWhiteStoneColor: {r: 0.96, g: 0.97, b: 0.96, a: 1}
   landmarkVeryLightStoneColor: {r: 0.82, g: 0.84, b: 0.82, a: 1}
@@ -293,6 +302,7 @@ MonoBehaviour:
   playerFieldTravelLog: {fileID: 958355440}
   gridDebugHud: {fileID: 958355436}
   runeManager: {fileID: 958355441}
+  worldEndFrostController: {fileID: 958355442}
   footClearanceMeters: 0.18
   faceTowardPositiveZOnSpawn: 1
 --- !u!4 &958355439
@@ -357,6 +367,39 @@ MonoBehaviour:
   emptySocketColor: {r: 0.46, g: 0.46, b: 0.46, a: 1}
   depositedSocketColor: {r: 1, g: 0.02, b: 0.02, a: 1}
   homeNeededLetterColor: {r: 1, g: 0.02, b: 0.02, a: 1}
+--- !u!114 &958355442
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958355435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a9d2f1e6c84491da0b36c5890f6b3e5, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LostForest.Phase2.World.WorldEndFrostController
+  player: {fileID: 0}
+  gridAddressTracker: {fileID: 0}
+  activeRegionRenderer: {fileID: 0}
+  playerCondition: {fileID: 0}
+  targetCamera: {fileID: 0}
+  maximumKnownRingDepth: 3
+  secondsToFullExposure: 30
+  exposureRecoverySecondsInsideField: 8
+  minimumFrostSpeedMultiplier: 0.18
+  renderFrostAroundPlayer: 1
+  clampMovementBeyondKnownRings: 1
+  showFrostVignette: 1
+  drawFrostVignetteInScreenPass: 1
+  vignetteRecoverySecondsInsideField: 180
+  frostColor: {r: 0.68, g: 0.9, b: 1, a: 1}
+  minimumEdgeAlpha: 0.38
+  minimumFillAlpha: 0.08
+  maximumEdgeAlpha: 0.96
+  maximumFillAlpha: 0.72
+  logFrostTransitions: 1
+  logFrostBarrierClamps: 1
 --- !u!1 &1112677417
 GameObject:
   m_ObjectHideFlags: 0
@@ -605,6 +648,7 @@ MonoBehaviour:
   sprintKey: 32
   playerCondition: {fileID: 2063129117}
   terrainMovementState: {fileID: 2063129119}
+  worldEndFrostController: {fileID: 958355442}
   gravityMetersPerSecondSquared: -24
   groundedDownwardVelocity: -2
   logSprintTransitions: 1
@@ -673,6 +717,8 @@ MonoBehaviour:
   sprintWarmthReduction: 0.35
   sprintChillReductionPerSecond: 0.055
   stillnessChillMultiplier: 2
+  frostExposure: 0
+  frostChillPressurePerSecond: 0
   sprintFatigue: 0
   sprintFatigueGainPerSecond: 0.06
   sprintFatigueRecoveryPerSecond: 0.025

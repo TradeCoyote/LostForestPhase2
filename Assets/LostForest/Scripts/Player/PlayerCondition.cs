@@ -22,6 +22,8 @@ namespace LostForest.Phase2.Player
         [SerializeField, Range(0f, 1f)] private float sprintWarmthReduction = 0.35f;
         [SerializeField] private float sprintChillReductionPerSecond = 0.055f;
         [SerializeField] private float stillnessChillMultiplier = 2f;
+        [SerializeField, Range(0f, 1f)] private float frostExposure = 0f;
+        [SerializeField] private float frostChillPressurePerSecond = 0f;
 
         [Header("Stamina Cap Pressure")]
         [SerializeField, Range(0f, 1f)] private float sprintFatigue = 0f;
@@ -64,6 +66,8 @@ namespace LostForest.Phase2.Player
         public float MaxChill => Mathf.Max(1f, maxChill);
         public float Chill => Mathf.Clamp(chill, 0f, MaxChill);
         public float ChillNormalized => Chill / MaxChill;
+        public float FrostExposureNormalized => Mathf.Clamp01(frostExposure);
+        public float FrostChillPressurePerSecond => Mathf.Max(0f, frostChillPressurePerSecond);
         public float SprintFatigueNormalized => Mathf.Clamp01(sprintFatigue);
         public float ChillStaminaCapMultiplier => Mathf.Clamp01(1f - ChillNormalized);
         public float SprintFatigueCapMultiplier => Mathf.Lerp(1f, MinimumSprintFatigueCapMultiplier, Mathf.Pow(SprintFatigueNormalized, Mathf.Max(0.01f, sprintFatigueCapExponent)));
@@ -83,6 +87,8 @@ namespace LostForest.Phase2.Player
             sprintFatigue = 0f;
             stamina = BaseMaxStamina;
             chill = 0f;
+            frostExposure = 0f;
+            frostChillPressurePerSecond = 0f;
             exhausted = false;
             lastLoggedExhausted = false;
             lastLoggedChillBand = -1;
@@ -105,6 +111,8 @@ namespace LostForest.Phase2.Player
             sprintWarmthReduction = 0.35f;
             sprintChillReductionPerSecond = 0.055f;
             stillnessChillMultiplier = 2f;
+            frostExposure = Mathf.Clamp01(frostExposure);
+            frostChillPressurePerSecond = Mathf.Max(0f, frostChillPressurePerSecond);
             sprintFatigue = Mathf.Clamp01(sprintFatigue);
             sprintFatigueGainPerSecond = 0.06f;
             sprintFatigueRecoveryPerSecond = 0.025f;
@@ -170,6 +178,8 @@ namespace LostForest.Phase2.Player
             baseChillGainPerSecond = Mathf.Max(0f, baseChillGainPerSecond);
             sprintChillReductionPerSecond = Mathf.Max(0f, sprintChillReductionPerSecond);
             stillnessChillMultiplier = Mathf.Max(0.01f, stillnessChillMultiplier);
+            frostExposure = Mathf.Clamp01(frostExposure);
+            frostChillPressurePerSecond = Mathf.Max(0f, frostChillPressurePerSecond);
             sprintFatigue = Mathf.Clamp01(sprintFatigue);
             sprintFatigueGainPerSecond = Mathf.Max(0f, sprintFatigueGainPerSecond);
             sprintFatigueRecoveryPerSecond = Mathf.Max(0f, sprintFatigueRecoveryPerSecond);
@@ -222,7 +232,19 @@ namespace LostForest.Phase2.Player
                 chillRate *= Mathf.Max(0.01f, stillnessChillMultiplier);
             }
 
+            chillRate += FrostChillPressurePerSecond;
             chill = Mathf.Clamp(chill + chillRate * deltaTime, 0f, MaxChill);
+
+            if (FrostExposureNormalized > 0f)
+            {
+                chill = Mathf.Max(chill, FrostExposureNormalized * MaxChill);
+            }
+        }
+
+        public void SetFrostChillPressure(float exposureNormalized, float chillPressurePerSecond)
+        {
+            frostExposure = Mathf.Clamp01(exposureNormalized);
+            frostChillPressurePerSecond = Mathf.Max(0f, chillPressurePerSecond);
         }
 
         private void UpdateExhaustionState()
@@ -527,7 +549,7 @@ namespace LostForest.Phase2.Player
 
         public string BuildDebugStatus(string reason, bool isSprinting)
         {
-            return $"Lost Forest Player Condition: Reason={reason}, Stamina={Stamina:0}/{EffectiveMaxStamina:0}, BaseStamina={BaseMaxStamina:0}, Chill={Chill:0}/{MaxChill:0}, ChillCapMultiplier={ChillStaminaCapMultiplier:0.00}, FatigueCapMultiplier={SprintFatigueCapMultiplier:0.00}, ConditionSpeedMultiplier={ConditionSpeedMultiplier:0.00}, Sprinting={isSprinting}, Exhausted={IsExhausted}, Frozen={IsFrozen}, GameOver={IsGameOver}";
+            return $"Lost Forest Player Condition: Reason={reason}, Stamina={Stamina:0}/{EffectiveMaxStamina:0}, BaseStamina={BaseMaxStamina:0}, Chill={Chill:0}/{MaxChill:0}, FrostExposure={FrostExposureNormalized * 100f:0}%, FrostPressure={FrostChillPressurePerSecond:0.00}/s, ChillCapMultiplier={ChillStaminaCapMultiplier:0.00}, FatigueCapMultiplier={SprintFatigueCapMultiplier:0.00}, ConditionSpeedMultiplier={ConditionSpeedMultiplier:0.00}, Sprinting={isSprinting}, Exhausted={IsExhausted}, Frozen={IsFrozen}, GameOver={IsGameOver}";
         }
     }
 }

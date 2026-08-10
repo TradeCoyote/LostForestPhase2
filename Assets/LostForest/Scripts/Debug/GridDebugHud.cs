@@ -16,9 +16,11 @@ namespace LostForest.Phase2.Debugging
         [SerializeField] private PlayerCondition playerCondition;
         [SerializeField] private PlayerTerrainMovementState playerTerrainMovementState;
         [SerializeField] private ActiveRegionRenderer activeRegionRenderer;
+        [SerializeField] private WorldEndFrostController worldEndFrostController;
         [SerializeField] private RuneManager runeManager;
         [SerializeField] private Camera targetCamera;
         [SerializeField] private bool showHud = true;
+        [SerializeField] private KeyCode toggleHudKey = KeyCode.T;
         [SerializeField] private float cameraOverlayDistance = 0.9f;
         [SerializeField, Range(0f, 0.25f)] private float viewportInsetX = 0.045f;
         [SerializeField, Range(0f, 0.25f)] private float viewportInsetY = 0.06f;
@@ -26,7 +28,7 @@ namespace LostForest.Phase2.Debugging
         [SerializeField, Range(0.15f, 0.95f)] private float panelViewportHeight = 0.84f;
         [SerializeField, Range(0.01f, 0.12f)] private float textInsetViewport = 0.025f;
         [SerializeField] private Color textColor = new Color(1f, 0f, 0.75f, 1f);
-        [SerializeField] private Color backingColor = new Color(0.92f, 0.97f, 1f, 0.92f);
+        [SerializeField] private Color backingColor = new Color(0.92f, 0.97f, 1f, 0f);
 
         private Transform hudRoot;
         private GridDebugMeshText hudText;
@@ -61,6 +63,11 @@ namespace LostForest.Phase2.Debugging
             runeManager = newRuneManager;
         }
 
+        public void SetWorldEndFrostController(WorldEndFrostController newWorldEndFrostController)
+        {
+            worldEndFrostController = newWorldEndFrostController;
+        }
+
         public void SetCamera(Camera newTargetCamera)
         {
             targetCamera = newTargetCamera;
@@ -69,13 +76,14 @@ namespace LostForest.Phase2.Debugging
         public void ApplyCompactDefaults()
         {
             cameraOverlayDistance = 0.9f;
+            toggleHudKey = KeyCode.T;
             viewportInsetX = 0.045f;
             viewportInsetY = 0.06f;
             panelViewportWidth = 0.34f;
             panelViewportHeight = 0.84f;
             textInsetViewport = 0.025f;
             textColor = new Color(1f, 0f, 0.75f, 1f);
-            backingColor = new Color(0.92f, 0.97f, 1f, 0.92f);
+            backingColor = new Color(0.92f, 0.97f, 1f, 0f);
 
             if (hudText != null)
             {
@@ -91,6 +99,8 @@ namespace LostForest.Phase2.Debugging
 
         private void LateUpdate()
         {
+            HandleHudToggleInput();
+
             if (!showHud)
             {
                 if (hudRoot != null)
@@ -103,6 +113,14 @@ namespace LostForest.Phase2.Debugging
 
             EnsureHudText();
             UpdateHudText();
+        }
+
+        private void HandleHudToggleInput()
+        {
+            if (toggleHudKey != KeyCode.None && Input.GetKeyDown(toggleHudKey))
+            {
+                showHud = !showHud;
+            }
         }
 
         private void EnsureHudText()
@@ -326,7 +344,15 @@ namespace LostForest.Phase2.Debugging
         private string BuildGridAddressText()
         {
             FieldSlotData slot = gridAddressTracker == null ? null : gridAddressTracker.CurrentSlot;
-            return slot == null ? "--" : slot.Address;
+
+            if (slot != null)
+            {
+                return slot.Address;
+            }
+
+            return worldEndFrostController != null && worldEndFrostController.IsInFrostTerritory
+                ? "Outside Field"
+                : "--";
         }
 
         private string BuildElevationText()
@@ -408,9 +434,10 @@ namespace LostForest.Phase2.Debugging
             ConfigureHudPanel();
             string movementText = BuildMovementText();
             string conditionText = BuildConditionText();
+            string worldEndText = BuildWorldEndText();
             string runeText = BuildRuneText();
             string landmarkText = BuildLandmarkText();
-            string text = $"{BuildGridAddressText()}\n{BuildElevationText()}{BuildOptionalLine(movementText)}{BuildOptionalLine(conditionText)}{BuildOptionalLine(runeText)}{BuildOptionalLine(landmarkText)}";
+            string text = $"{BuildGridAddressText()}\n{BuildElevationText()}{BuildOptionalLine(movementText)}{BuildOptionalLine(conditionText)}{BuildOptionalLine(worldEndText)}{BuildOptionalLine(runeText)}{BuildOptionalLine(landmarkText)}";
             Vector2 textArea = ResolveCameraLocalPanelSize();
             hudText.SetText(text, textArea * 0.88f);
 
@@ -440,6 +467,25 @@ namespace LostForest.Phase2.Debugging
             }
 
             playerTerrainMovementState = gridAddressTracker.GetComponent<PlayerTerrainMovementState>();
+        }
+
+        private string BuildWorldEndText()
+        {
+            if (worldEndFrostController == null)
+            {
+                worldEndFrostController = FindAnyObjectByType<WorldEndFrostController>();
+            }
+
+            if (worldEndFrostController == null)
+            {
+                return string.Empty;
+            }
+
+            string summary = worldEndFrostController.BuildDebugSummary();
+            string frostTiles = activeRegionRenderer == null
+                ? string.Empty
+                : $"\nFrost Tiles Active: {activeRegionRenderer.ActiveRenderedFrostTileCount}/{activeRegionRenderer.OuterFrostRenderRings} rings";
+            return $"{summary}{frostTiles}";
         }
 
         private static string BuildOptionalLine(string value)

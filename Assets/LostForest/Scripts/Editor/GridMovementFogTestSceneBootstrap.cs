@@ -41,7 +41,8 @@ namespace LostForest.Phase2.Editor
                 out ActiveRegionRenderer activeRegionRenderer,
                 out GridDebugHud gridDebugHud,
                 out PlayerFieldTravelLog playerFieldTravelLog,
-                out RuneManager runeManager);
+                out RuneManager runeManager,
+                out WorldEndFrostController worldEndFrostController);
             GameObject playerObject = EnsurePlayer(
                 out PlayerGridAddressTracker gridAddressTracker,
                 out PlayerCondition playerCondition,
@@ -55,9 +56,12 @@ namespace LostForest.Phase2.Editor
             worldManager.SetPlayerFieldTravelLog(playerFieldTravelLog);
             worldManager.SetGridDebugHud(gridDebugHud);
             worldManager.SetRuneManager(runeManager);
+            worldManager.SetWorldEndFrostController(worldEndFrostController);
             runeManager.SetPlayer(playerObject.transform);
             runeManager.SetCamera(playerCamera);
             activeRegionRenderer.SetRuneManager(runeManager);
+            worldEndFrostController.ApplyPrototypeDefaults();
+            playerObject.GetComponent<EarlyWalkThruFirstPersonController>()?.SetWorldEndFrostController(worldEndFrostController);
             runeInteraction.SetSources(runeManager, playerCamera);
             runeInteraction.SetInteractionKey(KeyCode.X);
             playerFieldTravelLog.SetTracker(gridAddressTracker);
@@ -66,9 +70,11 @@ namespace LostForest.Phase2.Editor
             gridDebugHud.SetPlayerCondition(playerCondition);
             gridDebugHud.SetPlayerTerrainMovementState(playerTerrainMovementState);
             gridDebugHud.SetRuneManager(runeManager);
+            gridDebugHud.SetWorldEndFrostController(worldEndFrostController);
             gridDebugHud.SetCamera(playerCamera);
             gridDebugHud.ApplyCompactDefaults();
             activeRegionRenderer.SetActiveRadius(1);
+            activeRegionRenderer.SetOuterFrostRenderRings(3);
             activeRegionRenderer.ApplyBroadSlopeTerrainDefaults();
 
             EnsurePrototypeFog();
@@ -95,6 +101,7 @@ namespace LostForest.Phase2.Editor
             PlayerTerrainMovementState playerTerrainMovementState = UnityObject.FindAnyObjectByType<PlayerTerrainMovementState>();
             RuneManager runeManager = UnityObject.FindAnyObjectByType<RuneManager>();
             RuneInteraction runeInteraction = UnityObject.FindAnyObjectByType<RuneInteraction>();
+            WorldEndFrostController worldEndFrostController = UnityObject.FindAnyObjectByType<WorldEndFrostController>();
 
             if (worldManager == null)
             {
@@ -134,6 +141,11 @@ namespace LostForest.Phase2.Editor
             if (runeInteraction == null)
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no RuneInteraction exists on the player.");
+            }
+
+            if (worldEndFrostController == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no WorldEndFrostController exists in the scene.");
             }
 
             worldManager.InitializeWorld();
@@ -179,16 +191,18 @@ namespace LostForest.Phase2.Editor
             }
 
             ValidateConditionEconomy(playerCondition);
+            ValidateWorldEndFrostPrototype(worldManager, activeRegionRenderer, playerCondition, worldEndFrostController);
             ValidateRunePrototype(worldManager, activeRegionRenderer, runeManager);
 
-            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}");
+            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}");
         }
 
         private static GridMovementWorldManager EnsureWorldManager(
             out ActiveRegionRenderer activeRegionRenderer,
             out GridDebugHud gridDebugHud,
             out PlayerFieldTravelLog playerFieldTravelLog,
-            out RuneManager runeManager)
+            out RuneManager runeManager,
+            out WorldEndFrostController worldEndFrostController)
         {
             GridMovementWorldManager worldManager = UnityObject.FindAnyObjectByType<GridMovementWorldManager>();
             GameObject worldObject;
@@ -214,6 +228,7 @@ namespace LostForest.Phase2.Editor
             gridDebugHud = GetOrAddComponent<GridDebugHud>(worldObject);
             playerFieldTravelLog = GetOrAddComponent<PlayerFieldTravelLog>(worldObject);
             runeManager = GetOrAddComponent<RuneManager>(worldObject);
+            worldEndFrostController = GetOrAddComponent<WorldEndFrostController>(worldObject);
             return worldManager;
         }
 
@@ -397,6 +412,72 @@ namespace LostForest.Phase2.Editor
             }
 
             playerCondition.ResetCondition();
+        }
+
+        private static void ValidateWorldEndFrostPrototype(
+            GridMovementWorldManager worldManager,
+            ActiveRegionRenderer activeRegionRenderer,
+            PlayerCondition playerCondition,
+            WorldEndFrostController worldEndFrostController)
+        {
+            if (!worldEndFrostController.IsConfigured)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: World's End Frost controller was not configured.");
+            }
+
+            if (activeRegionRenderer.OuterFrostRenderRings != 3)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: expected World's End to render 3 frost rings in the border test scene, got {activeRegionRenderer.OuterFrostRenderRings}.");
+            }
+
+            FieldSlotData edgeSlot = worldManager.FieldData.GetSlot(0, 0);
+
+            if (edgeSlot == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: could not resolve edge Slot A1 for frost render validation.");
+            }
+
+            Vector2Int outsideAxial = HexFrameMath.GetAxialNeighbor(edgeSlot.AxialCoordinate, HexDirection.West);
+            int ringDepth = FieldBoundaryMath.GetRingDepthFromPlayableField(worldManager.FieldData, outsideAxial, out FieldSlotData nearestPlayableSlot);
+
+            if (ringDepth != 1 || nearestPlayableSlot == null)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: expected west of A1 to be frost ring 1, got Ring={ringDepth}, Nearest={(nearestPlayableSlot == null ? "None" : nearestPlayableSlot.Address)}.");
+            }
+
+            Vector3 outsideWorldCenter = HexFrameMath.GetFlatTopHexCenterFromAxial(outsideAxial, 45f);
+
+            if (FieldBoundaryMath.TryResolvePlayableSlot(worldManager.FieldData, 45f, outsideWorldCenter, out FieldSlotData outsideSlot) && outsideSlot != null)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: outside frost coordinate resolved to canonical Slot {outsideSlot.Address}.");
+            }
+
+            activeRegionRenderer.RenderAround(edgeSlot);
+
+            if (activeRegionRenderer.ActiveRenderedFrostTileCount <= 0)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: rendering an edge Slot did not create temporary frost tiles.");
+            }
+
+            if (!activeRegionRenderer.TrySampleFrostTerrainElevation(outsideWorldCenter, out TerrainElevationSample frostElevationSample))
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: rendered frost terrain could not be sampled.");
+            }
+
+            int activeFrostTilesAtEdge = activeRegionRenderer.ActiveRenderedFrostTileCount;
+
+            playerCondition.ResetCondition();
+            playerCondition.SetFrostChillPressure(0f, playerCondition.MaxChill / 30f);
+            playerCondition.Tick(30f, true, false, false);
+
+            if (!playerCondition.IsFrozen || !playerCondition.IsGameOver)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: 30 seconds of frost pressure did not freeze the player, Chill={playerCondition.Chill:0.00}/{playerCondition.MaxChill:0.00}.");
+            }
+
+            playerCondition.ResetCondition();
+            activeRegionRenderer.RenderAround(worldManager.HomeSlot);
+            Debug.Log($"Lost Forest World's End Frost validation passed: Edge={edgeSlot.Address}, OutsideAxial=({outsideAxial.x},{outsideAxial.y}), Ring={ringDepth}, ActiveFrostTiles={activeFrostTilesAtEdge}, SampleElevation={frostElevationSample.LogicalElevationMeters:0.0}m.");
         }
 
         private static void ValidateRunePrototype(GridMovementWorldManager worldManager, ActiveRegionRenderer activeRegionRenderer, RuneManager runeManager)

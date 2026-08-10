@@ -19,6 +19,7 @@ namespace LostForest.Phase2.World
         [SerializeField] private PlayerFieldTravelLog playerFieldTravelLog;
         [SerializeField] private GridDebugHud gridDebugHud;
         [SerializeField] private RuneManager runeManager;
+        [SerializeField] private WorldEndFrostController worldEndFrostController;
 
         [Header("Player Spawn")]
         [SerializeField] private float footClearanceMeters = 0.18f;
@@ -32,6 +33,7 @@ namespace LostForest.Phase2.World
         public FieldSlotData CurrentPlayerSlot => playerGridAddressTracker == null ? null : playerGridAddressTracker.CurrentSlot;
         public PlayerFieldTravelLog FieldTravelLog => playerFieldTravelLog;
         public RuneManager RuneManager => runeManager;
+        public WorldEndFrostController WorldEndFrostController => worldEndFrostController;
 
         public void SetPlayer(Transform newPlayer)
         {
@@ -80,6 +82,11 @@ namespace LostForest.Phase2.World
             }
         }
 
+        public void SetWorldEndFrostController(WorldEndFrostController newWorldEndFrostController)
+        {
+            worldEndFrostController = newWorldEndFrostController;
+        }
+
         [ContextMenu("Initialize Grid Movement World")]
         public void InitializeWorld()
         {
@@ -123,14 +130,17 @@ namespace LostForest.Phase2.World
 
             if (playerGridAddressTracker != null)
             {
-                playerGridAddressTracker.SetFieldData(FieldData);
+                playerGridAddressTracker.SetFieldData(FieldData, frameSettings.HexOuterRadiusMeters);
                 playerGridAddressTracker.RefreshCurrentSlot(true);
             }
+
+            ConfigureWorldEndFrost(playerCamera);
 
             if (gridDebugHud != null)
             {
                 gridDebugHud.SetSources(playerGridAddressTracker, activeRegionRenderer);
                 gridDebugHud.SetRuneManager(runeManager);
+                gridDebugHud.SetWorldEndFrostController(worldEndFrostController);
             }
 
             if (logInitialization)
@@ -215,6 +225,16 @@ namespace LostForest.Phase2.World
                 runeManager = FindAnyObjectByType<RuneManager>();
             }
 
+            if (worldEndFrostController == null)
+            {
+                worldEndFrostController = GetComponent<WorldEndFrostController>();
+            }
+
+            if (worldEndFrostController == null)
+            {
+                worldEndFrostController = FindAnyObjectByType<WorldEndFrostController>();
+            }
+
             if (playerFieldTravelLog == null)
             {
                 playerFieldTravelLog = GetComponent<PlayerFieldTravelLog>();
@@ -251,8 +271,21 @@ namespace LostForest.Phase2.World
 
         private void HandlePlayerGridSlotChanged(FieldSlotData previousSlot, FieldSlotData currentSlot)
         {
-            if (activeRegionRenderer == null || currentSlot == null)
+            if (activeRegionRenderer == null)
             {
+                return;
+            }
+
+            if (currentSlot == null)
+            {
+                Transform source = playerGridAddressTracker == null ? player : playerGridAddressTracker.transform;
+
+                if (source != null)
+                {
+                    Vector2Int frostAxial = FieldBoundaryMath.WorldToNearestAxial(source.position, frameSettings.HexOuterRadiusMeters);
+                    activeRegionRenderer.RenderAroundFrostAxial(frostAxial);
+                }
+
                 return;
             }
 
@@ -262,6 +295,31 @@ namespace LostForest.Phase2.World
             }
 
             activeRegionRenderer.RenderAround(currentSlot);
+        }
+
+        private void ConfigureWorldEndFrost(Camera playerCamera)
+        {
+            if (worldEndFrostController == null)
+            {
+                return;
+            }
+
+            PlayerCondition playerCondition = player == null ? null : player.GetComponent<PlayerCondition>();
+            EarlyWalkThruFirstPersonController firstPersonController = player == null ? null : player.GetComponent<EarlyWalkThruFirstPersonController>();
+
+            if (firstPersonController != null)
+            {
+                firstPersonController.SetWorldEndFrostController(worldEndFrostController);
+            }
+
+            worldEndFrostController.Configure(
+                FieldData,
+                frameSettings.HexOuterRadiusMeters,
+                player,
+                playerGridAddressTracker,
+                activeRegionRenderer,
+                playerCondition,
+                playerCamera);
         }
 
         private void SpawnPlayerAtHome()
@@ -354,7 +412,9 @@ namespace LostForest.Phase2.World
             int activeLandmarkTiles = activeRegionRenderer == null ? 0 : activeRegionRenderer.ActiveRenderedLandmarkTileCount;
             bool travelLogActive = playerFieldTravelLog != null;
             string neededRunes = runeManager == null ? "None" : runeManager.NeededRunesDebugText;
-            return $"Lost Forest Grid Movement World initialized: Field={FieldData.Rows}x{FieldData.Columns}, Seed={FieldData.Seed}, Home={homeAddress}, PursuerOrigin={pursuerAddress}, LandmarkTiles={FieldData.LandmarkTileCount}, LandmarkTakeoverChance={frameSettings.LandmarkTileTakeoverChance * 100f:0.#}%, ActiveRadius={activeRadius}, ActiveSlots={activeSlots}, ActiveLandmarkTiles={activeLandmarkTiles}, TravelLogActive={travelLogActive}, NeededRunes={neededRunes}";
+            bool frostActive = worldEndFrostController != null;
+            int frostRings = activeRegionRenderer == null ? 0 : activeRegionRenderer.OuterFrostRenderRings;
+            return $"Lost Forest Grid Movement World initialized: Field={FieldData.Rows}x{FieldData.Columns}, Seed={FieldData.Seed}, Home={homeAddress}, PursuerOrigin={pursuerAddress}, LandmarkTiles={FieldData.LandmarkTileCount}, LandmarkTakeoverChance={frameSettings.LandmarkTileTakeoverChance * 100f:0.#}%, ActiveRadius={activeRadius}, ActiveSlots={activeSlots}, FrostActive={frostActive}, FrostRenderRings={frostRings}, ActiveLandmarkTiles={activeLandmarkTiles}, TravelLogActive={travelLogActive}, NeededRunes={neededRunes}";
         }
 
         private static float GetControllerFootToTransformOffset(CharacterController characterController)

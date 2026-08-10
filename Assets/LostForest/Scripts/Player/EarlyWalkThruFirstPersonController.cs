@@ -1,3 +1,4 @@
+using LostForest.Phase2.World;
 using UnityEngine;
 
 namespace LostForest.Phase2.Player
@@ -20,6 +21,7 @@ namespace LostForest.Phase2.Player
         [SerializeField] private KeyCode sprintKey = KeyCode.Space;
         [SerializeField] private PlayerCondition playerCondition;
         [SerializeField] private PlayerTerrainMovementState terrainMovementState;
+        [SerializeField] private WorldEndFrostController worldEndFrostController;
         [SerializeField] private float gravityMetersPerSecondSquared = -24f;
         [SerializeField] private float groundedDownwardVelocity = -2f;
 
@@ -56,6 +58,11 @@ namespace LostForest.Phase2.Player
             terrainMovementState = newTerrainMovementState;
         }
 
+        public void SetWorldEndFrostController(WorldEndFrostController newWorldEndFrostController)
+        {
+            worldEndFrostController = newWorldEndFrostController;
+        }
+
         public void SetSprintKey(KeyCode newSprintKey)
         {
             sprintKey = newSprintKey;
@@ -89,6 +96,11 @@ namespace LostForest.Phase2.Player
                 {
                     terrainMovementState = gameObject.AddComponent<PlayerTerrainMovementState>();
                 }
+            }
+
+            if (worldEndFrostController == null)
+            {
+                worldEndFrostController = FindAnyObjectByType<WorldEndFrostController>();
             }
         }
 
@@ -154,10 +166,25 @@ namespace LostForest.Phase2.Player
                     WantsSprint,
                     IsSprinting,
                     Time.deltaTime);
+
+            if (worldEndFrostController == null)
+            {
+                worldEndFrostController = FindAnyObjectByType<WorldEndFrostController>();
+            }
+
+            float frostSpeedMultiplier = worldEndFrostController == null ? 1f : worldEndFrostController.FrostSpeedMultiplier;
             FinalMovementSpeedMetersPerSecond = isFrozen
                 ? 0f
-                : TerrainAdjustedMovementSpeedMetersPerSecond * ConditionSpeedMultiplier;
+                : TerrainAdjustedMovementSpeedMetersPerSecond * ConditionSpeedMultiplier * frostSpeedMultiplier;
             Vector3 planarMove = movementDirection * FinalMovementSpeedMetersPerSecond;
+
+            if (worldEndFrostController != null &&
+                worldEndFrostController.TryClampPlanarVelocity(transform.position, planarMove, Time.deltaTime, out Vector3 clampedPlanarMove))
+            {
+                planarMove = clampedPlanarMove;
+                FinalMovementSpeedMetersPerSecond = new Vector2(planarMove.x, planarMove.z).magnitude;
+            }
+
             LogSprintTransitionIfNeeded();
             verticalVelocity += gravityMetersPerSecondSquared * Time.deltaTime;
 
@@ -236,8 +263,9 @@ namespace LostForest.Phase2.Player
             lastLoggedIsSprinting = IsSprinting;
             bool canSprint = playerCondition == null || playerCondition.CanSprint;
             float terrainMultiplier = terrainMovementState == null ? 1f : terrainMovementState.SpeedMultiplier;
+            float frostSpeedMultiplier = worldEndFrostController == null ? 1f : worldEndFrostController.FrostSpeedMultiplier;
             bool isFrozen = playerCondition != null && playerCondition.IsFrozen;
-            Debug.Log($"Lost Forest Sprint Input: WantsSprint={WantsSprint}, Sprinting={IsSprinting}, CanSprint={canSprint}, Key={sprintKey}, JumpButton={IsJumpButtonHeld()}, Speed={FinalMovementSpeedMetersPerSecond:0.0}, TerrainSpeed={TerrainAdjustedMovementSpeedMetersPerSecond:0.0}, TerrainMultiplier={terrainMultiplier:0.00}, ConditionMultiplier={ConditionSpeedMultiplier:0.00}, Frozen={isFrozen}", this);
+            Debug.Log($"Lost Forest Sprint Input: WantsSprint={WantsSprint}, Sprinting={IsSprinting}, CanSprint={canSprint}, Key={sprintKey}, JumpButton={IsJumpButtonHeld()}, Speed={FinalMovementSpeedMetersPerSecond:0.0}, TerrainSpeed={TerrainAdjustedMovementSpeedMetersPerSecond:0.0}, TerrainMultiplier={terrainMultiplier:0.00}, ConditionMultiplier={ConditionSpeedMultiplier:0.00}, FrostMultiplier={frostSpeedMultiplier:0.00}, Frozen={isFrozen}", this);
         }
 
         private static Vector3 FlattenPlanarDirection(Vector3 direction)

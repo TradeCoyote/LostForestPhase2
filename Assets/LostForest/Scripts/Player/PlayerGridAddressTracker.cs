@@ -10,6 +10,7 @@ namespace LostForest.Phase2.Player
         [SerializeField] private bool logInitialSlot = true;
 
         private FieldData fieldData;
+        private float hexOuterRadiusMeters = 45f;
         private FieldSlotData currentSlot;
         private FieldSlotData previousSlot;
         private bool hasResolvedInitialSlot;
@@ -23,10 +24,17 @@ namespace LostForest.Phase2.Player
         public FieldSlotData PreviousSlot => previousSlot;
         public string CurrentGridAddress => currentSlot == null ? string.Empty : currentSlot.Address;
         public Vector2Int CurrentAxialCoordinate => currentSlot == null ? Vector2Int.zero : currentSlot.AxialCoordinate;
+        public float HexOuterRadiusMeters => Mathf.Max(1f, hexOuterRadiusMeters);
 
         public void SetFieldData(FieldData newFieldData)
         {
+            SetFieldData(newFieldData, hexOuterRadiusMeters);
+        }
+
+        public void SetFieldData(FieldData newFieldData, float newHexOuterRadiusMeters)
+        {
             fieldData = newFieldData;
+            hexOuterRadiusMeters = Mathf.Max(1f, newHexOuterRadiusMeters);
             currentSlot = null;
             previousSlot = null;
             hasResolvedInitialSlot = false;
@@ -34,15 +42,17 @@ namespace LostForest.Phase2.Player
 
         public void RefreshCurrentSlot(bool forceLog = false)
         {
-            if (!TryResolveSlot(transform.position, out FieldSlotData resolvedSlot))
-            {
-                return;
-            }
+            bool resolved = TryResolveSlot(transform.position, out FieldSlotData resolvedSlot);
 
             bool isInitialResolve = !hasResolvedInitialSlot;
             bool slotChanged = resolvedSlot != currentSlot;
 
-            if (!slotChanged && !forceLog)
+            if (!resolved && !slotChanged && !forceLog && hasResolvedInitialSlot)
+            {
+                return;
+            }
+
+            if (!slotChanged && !forceLog && !isInitialResolve)
             {
                 return;
             }
@@ -64,15 +74,7 @@ namespace LostForest.Phase2.Player
 
         public bool TryResolveSlot(Vector3 worldPosition, out FieldSlotData slot)
         {
-            slot = null;
-
-            if (fieldData == null || fieldData.SlotsFilled == 0)
-            {
-                return false;
-            }
-
-            slot = FindNearestFieldSlotByHorizontalDistance(worldPosition, fieldData);
-            return slot != null;
+            return FieldBoundaryMath.TryResolvePlayableSlot(fieldData, HexOuterRadiusMeters, worldPosition, out slot);
         }
 
         private void Update()
@@ -90,38 +92,14 @@ namespace LostForest.Phase2.Player
             return isInitialResolve ? logInitialSlot : slotChanged;
         }
 
-        private static FieldSlotData FindNearestFieldSlotByHorizontalDistance(Vector3 worldPosition, FieldData data)
-        {
-            FieldSlotData nearestSlot = null;
-            float nearestDistanceSquared = float.PositiveInfinity;
-
-            for (int i = 0; i < data.Slots.Count; i++)
-            {
-                FieldSlotData slot = data.Slots[i];
-
-                if (slot == null)
-                {
-                    continue;
-                }
-
-                Vector3 center = slot.WorldCenter;
-                float deltaX = worldPosition.x - center.x;
-                float deltaZ = worldPosition.z - center.z;
-                float distanceSquared = (deltaX * deltaX) + (deltaZ * deltaZ);
-
-                if (distanceSquared < nearestDistanceSquared)
-                {
-                    nearestDistanceSquared = distanceSquared;
-                    nearestSlot = slot;
-                }
-            }
-
-            return nearestSlot;
-        }
-
         private static string BuildSlotTransitionLog(FieldSlotData oldSlot, FieldSlotData newSlot)
         {
             string previousAddress = oldSlot == null ? "None" : oldSlot.Address;
+            if (newSlot == null)
+            {
+                return $"Lost Forest Player Grid Slot: Previous={previousAddress}, Current=None, OutsidePlayableField=True";
+            }
+
             return $"Lost Forest Player Grid Slot: Previous={previousAddress}, Current={newSlot.Address}, Row={newSlot.RowIndex}, Column={newSlot.ColumnIndex}, Axial=({newSlot.AxialQ}, {newSlot.AxialR}), Tile={newSlot.TileIdLabel}, Orientation=O{newSlot.OrientationIndex}/{newSlot.OrientationDegrees:0}deg, Role={newSlot.Role}";
         }
     }

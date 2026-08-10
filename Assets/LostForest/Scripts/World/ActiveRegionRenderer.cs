@@ -10,6 +10,7 @@ namespace LostForest.Phase2.World
     {
         private const float SqrtThree = 1.7320508f;
         private const string SlotRootName = "Rendered Active Slots";
+        private const string FrostRootName = "Rendered World's End Frost Tiles";
 
         [Header("Active Window")]
         [SerializeField, Range(0, 3)] private int activeRadius = 1;
@@ -33,6 +34,12 @@ namespace LostForest.Phase2.World
         [SerializeField] private bool showPlaceholderForestContent = true;
         [SerializeField] private int placeholderContentSeed = 2026;
 
+        [Header("World's End Frost Territory")]
+        [SerializeField] private bool showOuterFrostTiles = true;
+        [SerializeField, Range(0, 3)] private int outerFrostRenderRings = 3;
+        [SerializeField] private bool showOuterFrostForestContent = true;
+        [SerializeField] private int outerFrostContentSeed = 31013;
+
         [Header("Home Landmark")]
         [SerializeField] private bool showHomeStones = true;
         [SerializeField] private float homeStoneEmbedMeters = 0.08f;
@@ -51,6 +58,9 @@ namespace LostForest.Phase2.World
         [SerializeField] private Color placeholderHomeTreeColor = new Color(0.93f, 0.95f, 0.90f, 1f);
         [SerializeField] private Color placeholderThreatTreeColor = new Color(0.13f, 0.14f, 0.15f, 1f);
         [SerializeField] private Color placeholderBarkBandColor = new Color(0.045f, 0.047f, 0.045f, 1f);
+        [SerializeField] private Color outerFrostTerrainColor = new Color(0.78f, 0.91f, 1f, 1f);
+        [SerializeField] private Color outerFrostTreeTrunkColor = new Color(0.76f, 0.91f, 0.98f, 1f);
+        [SerializeField] private Color outerFrostBarkBandColor = new Color(0.42f, 0.58f, 0.68f, 1f);
         [SerializeField] private Color homeStoneColor = Color.black;
         [SerializeField] private Color landmarkWhiteStoneColor = new Color(0.96f, 0.97f, 0.96f, 1f);
         [SerializeField] private Color landmarkVeryLightStoneColor = new Color(0.82f, 0.84f, 0.82f, 1f);
@@ -60,6 +70,7 @@ namespace LostForest.Phase2.World
         [SerializeField] private Color landmarkTotemColor = new Color(0.54f, 0.56f, 0.52f, 1f);
 
         private readonly Dictionary<string, RenderedSlotInstance> renderedSlots = new Dictionary<string, RenderedSlotInstance>();
+        private readonly Dictionary<Vector2Int, RenderedFrostTileInstance> renderedFrostTiles = new Dictionary<Vector2Int, RenderedFrostTileInstance>();
 
         private FieldData fieldData;
         private float hexOuterRadiusMeters = 45f;
@@ -71,6 +82,9 @@ namespace LostForest.Phase2.World
         private Material homeTrunkMaterial;
         private Material threatTrunkMaterial;
         private Material barkBandMaterial;
+        private Material outerFrostTerrainMaterial;
+        private Material outerFrostTrunkMaterial;
+        private Material outerFrostBarkBandMaterial;
         private Material homeStoneMaterial;
         private Material landmarkWhiteStoneMaterial;
         private Material landmarkVeryLightStoneMaterial;
@@ -79,12 +93,19 @@ namespace LostForest.Phase2.World
         private Material landmarkDarkStoneMaterial;
         private Material landmarkTotemMaterial;
         private FieldSlotData homeSlot;
+        private Transform frostRoot;
+        private TileContentSpawner frostTileContentSpawner;
+        private int frostGenerationSerial;
 
         public int ActiveRadius => Mathf.Max(0, activeRadius);
+        public int OuterFrostRenderRings => Mathf.Clamp(outerFrostRenderRings, 0, 3);
         public int ActiveRenderedSlotCount => renderedSlots.Count;
+        public int ActiveRenderedFrostTileCount => renderedFrostTiles.Count;
         public int ActiveRenderedLandmarkTileCount => CountActiveRenderedLandmarkTiles();
         public int ActiveLandmarkInstanceCount => CountActiveLandmarkInstances();
         public FieldSlotData CurrentCenterSlot { get; private set; }
+        public Vector2Int CurrentRenderCenterAxial { get; private set; }
+        public bool IsRenderingAroundFrostCenter { get; private set; }
         public IReadOnlyDictionary<string, RenderedSlotInstance> RenderedSlots => renderedSlots;
 
         public void SetRuneManager(RuneManager newRuneManager)
@@ -107,6 +128,11 @@ namespace LostForest.Phase2.World
             activeRadius = Mathf.Clamp(newActiveRadius, 0, 3);
         }
 
+        public void SetOuterFrostRenderRings(int newOuterFrostRenderRings)
+        {
+            outerFrostRenderRings = Mathf.Clamp(newOuterFrostRenderRings, 0, 3);
+        }
+
         public void ApplyBroadSlopeTerrainDefaults()
         {
             heightAmplitudeMeters = 42f;
@@ -122,11 +148,29 @@ namespace LostForest.Phase2.World
                 return;
             }
 
-            CurrentCenterSlot = centerSlot;
+            RenderAroundAxial(centerSlot.AxialCoordinate, centerSlot, false);
+        }
+
+        public void RenderAroundFrostAxial(Vector2Int centerAxialCoordinate)
+        {
+            if (fieldData == null)
+            {
+                return;
+            }
+
+            RenderAroundAxial(centerAxialCoordinate, null, true);
+        }
+
+        private void RenderAroundAxial(Vector2Int centerAxialCoordinate, FieldSlotData canonicalCenterSlot, bool frostCenter)
+        {
+            CurrentCenterSlot = canonicalCenterSlot;
+            CurrentRenderCenterAxial = centerAxialCoordinate;
+            IsRenderingAroundFrostCenter = frostCenter;
             EnsureMaterials();
             EnsureSlotRoot();
+            EnsureFrostRoot();
 
-            Dictionary<string, int> desiredDistancesByAddress = BuildDesiredDistances(centerSlot);
+            Dictionary<string, int> desiredDistancesByAddress = BuildDesiredDistances(centerAxialCoordinate);
             List<string> staleAddresses = new List<string>();
 
             foreach (KeyValuePair<string, RenderedSlotInstance> entry in renderedSlots)
@@ -164,9 +208,40 @@ namespace LostForest.Phase2.World
                 addedCount++;
             }
 
+            Dictionary<Vector2Int, FrostTileRenderPlan> desiredFrostTiles = BuildDesiredFrostTiles(centerAxialCoordinate);
+            List<Vector2Int> staleFrostTiles = new List<Vector2Int>();
+
+            foreach (KeyValuePair<Vector2Int, RenderedFrostTileInstance> entry in renderedFrostTiles)
+            {
+                if (!desiredFrostTiles.ContainsKey(entry.Key))
+                {
+                    staleFrostTiles.Add(entry.Key);
+                }
+            }
+
+            for (int i = 0; i < staleFrostTiles.Count; i++)
+            {
+                RemoveRenderedFrostTile(staleFrostTiles[i]);
+            }
+
+            int addedFrostCount = 0;
+
+            foreach (KeyValuePair<Vector2Int, FrostTileRenderPlan> desiredFrostTile in desiredFrostTiles)
+            {
+                if (renderedFrostTiles.TryGetValue(desiredFrostTile.Key, out RenderedFrostTileInstance existingFrostInstance))
+                {
+                    existingFrostInstance.SetDistanceBand(desiredFrostTile.Value.DistanceFromCenter);
+                    continue;
+                }
+
+                RenderedFrostTileInstance frostInstance = CreateRenderedFrostTile(desiredFrostTile.Value);
+                renderedFrostTiles[desiredFrostTile.Key] = frostInstance;
+                addedFrostCount++;
+            }
+
             if (logRenderUpdates)
             {
-                Debug.Log(BuildRenderUpdateLog(centerSlot, addedCount, staleAddresses.Count));
+                Debug.Log(BuildRenderUpdateLog(canonicalCenterSlot, centerAxialCoordinate, frostCenter, addedCount, staleAddresses.Count, addedFrostCount, staleFrostTiles.Count));
             }
         }
 
@@ -223,6 +298,47 @@ namespace LostForest.Phase2.World
             return true;
         }
 
+        public bool TrySampleFrostTerrainElevation(Vector3 worldXzPosition, out TerrainElevationSample elevationSample)
+        {
+            elevationSample = default;
+
+            if (fieldData == null || renderedFrostTiles.Count == 0)
+            {
+                return false;
+            }
+
+            Vector2Int axial = FieldBoundaryMath.WorldToNearestAxial(worldXzPosition, hexOuterRadiusMeters);
+
+            if (!renderedFrostTiles.TryGetValue(axial, out RenderedFrostTileInstance frostTile) || frostTile == null)
+            {
+                return false;
+            }
+
+            if (!frostTile.TrySampleSurface(worldXzPosition, out TerrainSurfaceSample surfaceSample))
+            {
+                return false;
+            }
+
+            TerrainFrameSettings settings = CreateTerrainFrameSettings();
+            FieldSlotData resolvedHomeSlot = homeSlot ?? FindHomeSlot(fieldData);
+            float homeLogicalElevation = resolvedHomeSlot == null
+                ? surfaceSample.GetLogicalElevationMeters(settings, terrainSurfaceLift)
+                : TerrainFrameGenerator.GetLogicalHeightAtWorldPosition(resolvedHomeSlot.WorldCenter, settings);
+            float planarDistanceFromHome = GetPlanarDistance(resolvedHomeSlot, worldXzPosition);
+            Vector3 planarDirectionFromHome = GetPlanarDirection(resolvedHomeSlot, worldXzPosition);
+
+            elevationSample = TerrainElevationSample.FromSurfaceSample(
+                surfaceSample,
+                settings,
+                terrainSurfaceLift,
+                homeLogicalElevation,
+                frostTile.RingDepth,
+                planarDistanceFromHome,
+                planarDirectionFromHome);
+
+            return true;
+        }
+
         public bool TryGetNearestLandmarkDebug(Vector3 worldPosition, out string debugText)
         {
             LandmarkInstance nearest = null;
@@ -266,10 +382,18 @@ namespace LostForest.Phase2.World
                 RemoveRenderedSlot(addresses[i]);
             }
 
+            List<Vector2Int> frostTiles = new List<Vector2Int>(renderedFrostTiles.Keys);
+
+            for (int i = 0; i < frostTiles.Count; i++)
+            {
+                RemoveRenderedFrostTile(frostTiles[i]);
+            }
+
             CurrentCenterSlot = null;
+            IsRenderingAroundFrostCenter = false;
         }
 
-        private Dictionary<string, int> BuildDesiredDistances(FieldSlotData centerSlot)
+        private Dictionary<string, int> BuildDesiredDistances(Vector2Int centerAxialCoordinate)
         {
             Dictionary<string, int> desiredDistances = new Dictionary<string, int>();
             int radius = ActiveRadius;
@@ -283,7 +407,7 @@ namespace LostForest.Phase2.World
                     continue;
                 }
 
-                int distance = HexFrameMath.GetHexDistance(centerSlot.AxialCoordinate, fieldSlot.AxialCoordinate);
+                int distance = HexFrameMath.GetHexDistance(centerAxialCoordinate, fieldSlot.AxialCoordinate);
 
                 if (distance <= radius)
                 {
@@ -292,6 +416,44 @@ namespace LostForest.Phase2.World
             }
 
             return desiredDistances;
+        }
+
+        private Dictionary<Vector2Int, FrostTileRenderPlan> BuildDesiredFrostTiles(Vector2Int centerAxialCoordinate)
+        {
+            Dictionary<Vector2Int, FrostTileRenderPlan> desiredTiles = new Dictionary<Vector2Int, FrostTileRenderPlan>();
+
+            if (!showOuterFrostTiles || fieldData == null || OuterFrostRenderRings <= 0)
+            {
+                return desiredTiles;
+            }
+
+            int searchRadius = ActiveRadius + OuterFrostRenderRings;
+
+            for (int qOffset = -searchRadius; qOffset <= searchRadius; qOffset++)
+            {
+                for (int rOffset = -searchRadius; rOffset <= searchRadius; rOffset++)
+                {
+                    Vector2Int axial = centerAxialCoordinate + new Vector2Int(qOffset, rOffset);
+                    int distanceFromCenter = HexFrameMath.GetHexDistance(centerAxialCoordinate, axial);
+
+                    if (distanceFromCenter > searchRadius)
+                    {
+                        continue;
+                    }
+
+                    int ringDepth = FieldBoundaryMath.GetRingDepthFromPlayableField(fieldData, axial, out _);
+
+                    if (ringDepth <= 0 || ringDepth > OuterFrostRenderRings)
+                    {
+                        continue;
+                    }
+
+                    Vector3 worldCenter = HexFrameMath.GetFlatTopHexCenterFromAxial(axial, hexOuterRadiusMeters);
+                    desiredTiles[axial] = new FrostTileRenderPlan(axial, worldCenter, ringDepth, distanceFromCenter);
+                }
+            }
+
+            return desiredTiles;
         }
 
         private RenderedSlotInstance CreateRenderedSlot(FieldSlotData fieldSlot, int distanceFromCenter)
@@ -329,6 +491,82 @@ namespace LostForest.Phase2.World
             LandmarkInstance landmarkInstance = terrainSlot == null ? null : SpawnLandmarkTile(slotObject.transform, fieldSlot, terrainSlot, surfaceSampler);
 
             return new RenderedSlotInstance(fieldSlot, terrainFrameData, terrainSlot, slotObject, terrainMeshData, surfaceSampler, distanceFromCenter, landmarkInstance);
+        }
+
+        private RenderedFrostTileInstance CreateRenderedFrostTile(FrostTileRenderPlan plan)
+        {
+            GameObject tileObject = new GameObject($"World's End Frost Tile Ring {plan.RingDepth} Axial {plan.AxialCoordinate.x},{plan.AxialCoordinate.y}");
+            tileObject.transform.SetParent(frostRoot == null ? slotRoot : frostRoot, false);
+
+            TerrainSlotBuildRequest request = new TerrainSlotBuildRequest(
+                BuildFrostSlotLabel(plan),
+                plan.AxialCoordinate,
+                plan.WorldCenter);
+            TerrainFrameData terrainFrameData = TerrainFrameGenerator.GenerateForTemporarySlots(CreateTerrainFrameSettings(), new[] { request });
+            TerrainSlotData terrainSlot = terrainFrameData.SlotCount == 0 ? null : terrainFrameData.Slots[0];
+            HexTerrainMeshData terrainMeshData = terrainSlot == null
+                ? new HexTerrainMeshData(tileObject.transform, "World's End Empty Frost Terrain Mesh")
+                : HexTerrainMeshBuilder.BuildSlotSurface(terrainSlot, tileObject.transform, outerFrostTerrainMaterial, CreateFrostTerrainMeshSettings());
+            TerrainSurfaceSampler surfaceSampler = new TerrainSurfaceSampler(terrainFrameData, terrainMeshData);
+
+            if (terrainSlot != null && showOuterFrostForestContent)
+            {
+                SpawnFrostPlaceholderContent(tileObject.transform, terrainSlot, surfaceSampler, plan);
+            }
+
+            return new RenderedFrostTileInstance(
+                plan.AxialCoordinate,
+                plan.RingDepth,
+                tileObject,
+                terrainFrameData,
+                terrainSlot,
+                terrainMeshData,
+                surfaceSampler,
+                plan.DistanceFromCenter);
+        }
+
+        private void SpawnFrostPlaceholderContent(
+            Transform parent,
+            TerrainSlotData terrainSlot,
+            TerrainSurfaceSampler surfaceSampler,
+            FrostTileRenderPlan plan)
+        {
+            if (parent == null || terrainSlot == null)
+            {
+                return;
+            }
+
+            if (frostTileContentSpawner == null)
+            {
+                frostTileContentSpawner = new TileContentSpawner(
+                    outerFrostTrunkMaterial,
+                    outerFrostTerrainMaterial,
+                    outerFrostTrunkMaterial,
+                    outerFrostTrunkMaterial,
+                    outerFrostBarkBandMaterial);
+            }
+
+            Transform contentRoot = new GameObject($"World's End Frost Ring {plan.RingDepth} Temporary Forest").transform;
+            contentRoot.SetParent(parent, false);
+            TileDefinition definition = CreateFrostTileDefinition(plan);
+            int contentSeed = GetFrostContentWorldSeed(plan);
+            int orientationIndex = ResolveFrostOrientationIndex(plan, contentSeed);
+
+            int spawnedCount = frostTileContentSpawner.SpawnForestStandIns(
+                contentRoot,
+                terrainSlot,
+                definition,
+                surfaceSampler,
+                contentSeed,
+                orientationIndex,
+                hexOuterRadiusMeters,
+                out int groundedCount,
+                out int skippedCount);
+
+            if (spawnedCount == 0 && groundedCount == 0 && skippedCount == 0)
+            {
+                DestroyEmptyContentRoot(contentRoot.gameObject);
+            }
         }
 
         private LandmarkInstance SpawnLandmarkTile(
@@ -419,6 +657,17 @@ namespace LostForest.Phase2.World
             instance.Destroy();
         }
 
+        private void RemoveRenderedFrostTile(Vector2Int axialCoordinate)
+        {
+            if (!renderedFrostTiles.TryGetValue(axialCoordinate, out RenderedFrostTileInstance instance))
+            {
+                return;
+            }
+
+            renderedFrostTiles.Remove(axialCoordinate);
+            instance.Destroy();
+        }
+
         private TerrainFrameSettings CreateTerrainFrameSettings()
         {
             return new TerrainFrameSettings(
@@ -445,11 +694,94 @@ namespace LostForest.Phase2.World
                 false);
         }
 
+        private HexTerrainMeshSettings CreateFrostTerrainMeshSettings()
+        {
+            return new HexTerrainMeshSettings(
+                terrainSurfaceLift,
+                addTerrainMeshColliders,
+                markTerrainSurfaceStatic,
+                false,
+                "World's End Frost Terrain Mesh Group",
+                "Frost",
+                "Frost Terrain Surface",
+                "Frost Terrain Surface Mesh",
+                false);
+        }
+
+        private TileDefinition CreateFrostTileDefinition(FrostTileRenderPlan plan)
+        {
+            int visualProfileId = Mathf.Clamp(900 + plan.RingDepth, 900, 999);
+            int treeCount = Mathf.Clamp(4 + plan.RingDepth, 5, 7);
+            ForestFillProfile frostFill = new ForestFillProfile(
+                GetStableFrostHash(plan, 71),
+                treeCount,
+                9.5f,
+                5f,
+                5f,
+                new Vector2(10f, 17f),
+                new Vector2(0.45f, 1.0f));
+
+            return new TileDefinition(
+                visualProfileId,
+                "World's End Temporary Frost Forest",
+                TileReservedRole.None,
+                TileContentCategory.Forest,
+                false,
+                new[] { "worlds-end", "temporary-frost-terrain" },
+                new[] { "worlds-end", "temporary-frost-forest" },
+                true,
+                frostFill,
+                TileConstructionAnchors.CreatePrototypeHexAnchors(hexOuterRadiusMeters));
+        }
+
         private int GetContentWorldSeed()
         {
             unchecked
             {
                 return ((fieldData == null ? 0 : fieldData.Seed) * 397) ^ placeholderContentSeed;
+            }
+        }
+
+        private int GetFrostContentWorldSeed(FrostTileRenderPlan plan)
+        {
+            unchecked
+            {
+                frostGenerationSerial++;
+                int hash = 29;
+                hash = hash * 397 + (fieldData == null ? 0 : fieldData.Seed);
+                hash = hash * 397 + outerFrostContentSeed;
+                hash = hash * 397 + plan.AxialCoordinate.x;
+                hash = hash * 397 + plan.AxialCoordinate.y;
+                hash = hash * 397 + plan.RingDepth;
+                hash = hash * 397 + frostGenerationSerial;
+                return hash;
+            }
+        }
+
+        private int ResolveFrostOrientationIndex(FrostTileRenderPlan plan, int contentSeed)
+        {
+            unchecked
+            {
+                int hash = GetStableFrostHash(plan, contentSeed);
+                return (hash & 0x7fffffff) % 6;
+            }
+        }
+
+        private static string BuildFrostSlotLabel(FrostTileRenderPlan plan)
+        {
+            return $"WorldEndR{plan.RingDepth}_{plan.AxialCoordinate.x}_{plan.AxialCoordinate.y}";
+        }
+
+        private static int GetStableFrostHash(FrostTileRenderPlan plan, int salt)
+        {
+            unchecked
+            {
+                int hash = 43;
+                hash = hash * 397 + plan.AxialCoordinate.x;
+                hash = hash * 397 + plan.AxialCoordinate.y;
+                hash = hash * 397 + plan.RingDepth;
+                hash = hash * 397 + salt;
+                return hash;
             }
         }
 
@@ -527,10 +859,22 @@ namespace LostForest.Phase2.World
             return direction.sqrMagnitude <= 0.0001f ? Vector3.zero : direction.normalized;
         }
 
-        private string BuildRenderUpdateLog(FieldSlotData centerSlot, int addedCount, int removedCount)
+        private string BuildRenderUpdateLog(
+            FieldSlotData centerSlot,
+            Vector2Int centerAxialCoordinate,
+            bool frostCenter,
+            int addedCount,
+            int removedCount,
+            int addedFrostCount,
+            int removedFrostCount)
         {
+            if (centerSlot == null)
+            {
+                return $"Lost Forest Active Grid Render: Center=FrostTerritory, Axial=({centerAxialCoordinate.x}, {centerAxialCoordinate.y}), Radius={ActiveRadius}, FrostRings={OuterFrostRenderRings}, ActiveSlots={renderedSlots.Count}, ActiveFrostTiles={renderedFrostTiles.Count}, ActiveLandmarkTiles={ActiveRenderedLandmarkTileCount}, ActiveLandmarks={ActiveLandmarkInstanceCount}, Added={addedCount}, Removed={removedCount}, FrostAdded={addedFrostCount}, FrostRemoved={removedFrostCount}";
+            }
+
             string centerLandmarkTile = centerSlot.IsLandmarkTile ? "Yes" : "No";
-            return $"Lost Forest Active Grid Render: Center={centerSlot.Address}, Row={centerSlot.RowIndex}, Column={centerSlot.ColumnIndex}, Axial=({centerSlot.AxialQ}, {centerSlot.AxialR}), Tile={centerSlot.TileIdLabel}, LandmarkTile={centerLandmarkTile}, Orientation=O{centerSlot.OrientationIndex}/{centerSlot.OrientationDegrees:0}deg, Radius={ActiveRadius}, ActiveSlots={renderedSlots.Count}, ActiveLandmarkTiles={ActiveRenderedLandmarkTileCount}, ActiveLandmarks={ActiveLandmarkInstanceCount}, Added={addedCount}, Removed={removedCount}";
+            return $"Lost Forest Active Grid Render: Center={centerSlot.Address}, Row={centerSlot.RowIndex}, Column={centerSlot.ColumnIndex}, Axial=({centerSlot.AxialQ}, {centerSlot.AxialR}), Tile={centerSlot.TileIdLabel}, LandmarkTile={centerLandmarkTile}, Orientation=O{centerSlot.OrientationIndex}/{centerSlot.OrientationDegrees:0}deg, Radius={ActiveRadius}, FrostCenter={frostCenter}, FrostRings={OuterFrostRenderRings}, ActiveSlots={renderedSlots.Count}, ActiveFrostTiles={renderedFrostTiles.Count}, ActiveLandmarkTiles={ActiveRenderedLandmarkTileCount}, ActiveLandmarks={ActiveLandmarkInstanceCount}, Added={addedCount}, Removed={removedCount}, FrostAdded={addedFrostCount}, FrostRemoved={removedFrostCount}";
         }
 
         private int CountActiveRenderedLandmarkTiles()
@@ -583,6 +927,27 @@ namespace LostForest.Phase2.World
             slotRoot = rootObject.transform;
         }
 
+        private void EnsureFrostRoot()
+        {
+            if (frostRoot != null)
+            {
+                return;
+            }
+
+            Transform parentRoot = slotRoot == null ? transform : slotRoot;
+            Transform existingRoot = parentRoot.Find(FrostRootName);
+
+            if (existingRoot != null)
+            {
+                frostRoot = existingRoot;
+                return;
+            }
+
+            GameObject rootObject = new GameObject(FrostRootName);
+            rootObject.transform.SetParent(parentRoot, false);
+            frostRoot = rootObject.transform;
+        }
+
         private void EnsureMaterials()
         {
             terrainMaterial = terrainMaterial == null ? CreateMaterial("Active Grid Snow Terrain Material", terrainSurfaceColor) : terrainMaterial;
@@ -591,6 +956,9 @@ namespace LostForest.Phase2.World
             homeTrunkMaterial = homeTrunkMaterial == null ? CreateMaterial("Active Grid Home Trunk Material", placeholderHomeTreeColor) : homeTrunkMaterial;
             threatTrunkMaterial = threatTrunkMaterial == null ? CreateMaterial("Active Grid Threat Trunk Material", placeholderThreatTreeColor) : threatTrunkMaterial;
             barkBandMaterial = barkBandMaterial == null ? CreateMaterial("Active Grid Birch Bark Band Material", placeholderBarkBandColor) : barkBandMaterial;
+            outerFrostTerrainMaterial = outerFrostTerrainMaterial == null ? CreateMaterial("World's End Frost Terrain Material", outerFrostTerrainColor) : outerFrostTerrainMaterial;
+            outerFrostTrunkMaterial = outerFrostTrunkMaterial == null ? CreateMaterial("World's End Frost Tree Material", outerFrostTreeTrunkColor) : outerFrostTrunkMaterial;
+            outerFrostBarkBandMaterial = outerFrostBarkBandMaterial == null ? CreateMaterial("World's End Frost Bark Band Material", outerFrostBarkBandColor) : outerFrostBarkBandMaterial;
             homeStoneMaterial = homeStoneMaterial == null ? CreateMaterial("Active Grid Home Stone Material", homeStoneColor) : homeStoneMaterial;
             landmarkWhiteStoneMaterial = landmarkWhiteStoneMaterial == null ? CreateMaterial("Landmark White Stone Material", landmarkWhiteStoneColor) : landmarkWhiteStoneMaterial;
             landmarkVeryLightStoneMaterial = landmarkVeryLightStoneMaterial == null ? CreateMaterial("Landmark Very Light Stone Material", landmarkVeryLightStoneColor) : landmarkVeryLightStoneMaterial;
@@ -638,6 +1006,22 @@ namespace LostForest.Phase2.World
             }
 
             return Shader.Find("Sprites/Default");
+        }
+
+        private readonly struct FrostTileRenderPlan
+        {
+            public FrostTileRenderPlan(Vector2Int axialCoordinate, Vector3 worldCenter, int ringDepth, int distanceFromCenter)
+            {
+                AxialCoordinate = axialCoordinate;
+                WorldCenter = worldCenter;
+                RingDepth = Mathf.Max(1, ringDepth);
+                DistanceFromCenter = Mathf.Max(0, distanceFromCenter);
+            }
+
+            public Vector2Int AxialCoordinate { get; }
+            public Vector3 WorldCenter { get; }
+            public int RingDepth { get; }
+            public int DistanceFromCenter { get; }
         }
 
         private static void DestroyEmptyContentRoot(GameObject contentRoot)

@@ -95,7 +95,7 @@ namespace LostForest.Phase2.Player
             CurrentElevationSample = default;
             CurrentSlopeDegrees = 0f;
 
-            if (gridAddressTracker == null || activeRegionRenderer == null || gridAddressTracker.CurrentSlot == null)
+            if (gridAddressTracker == null || activeRegionRenderer == null)
             {
                 SignedMovementGradeDegrees = 0f;
                 SignedMovementGradeNormalized = 0f;
@@ -103,7 +103,12 @@ namespace LostForest.Phase2.Player
                 return;
             }
 
-            if (!activeRegionRenderer.TrySampleTerrainElevation(gridAddressTracker.CurrentSlot, transform.position, out TerrainElevationSample elevationSample))
+            TerrainElevationSample elevationSample;
+            bool sampledTerrain = gridAddressTracker.CurrentSlot == null
+                ? activeRegionRenderer.TrySampleFrostTerrainElevation(transform.position, out elevationSample)
+                : activeRegionRenderer.TrySampleTerrainElevation(gridAddressTracker.CurrentSlot, transform.position, out elevationSample);
+
+            if (!sampledTerrain)
             {
                 SignedMovementGradeDegrees = 0f;
                 SignedMovementGradeNormalized = 0f;

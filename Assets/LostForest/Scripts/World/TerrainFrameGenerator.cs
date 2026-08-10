@@ -76,6 +76,41 @@ namespace LostForest.Phase2.World
             return new TerrainFrameData(settings, slots, sharedPoints, localPointReferenceCount, reusedPointReferenceCount);
         }
 
+        public static TerrainFrameData GenerateForTemporarySlots(TerrainFrameSettings settings, IEnumerable<TerrainSlotBuildRequest> slotRequests)
+        {
+            if (settings == null)
+            {
+                settings = new TerrainFrameSettings();
+            }
+
+            Dictionary<string, SharedHeightPoint> sharedPointLookup = new Dictionary<string, SharedHeightPoint>();
+            List<SharedHeightPoint> sharedPoints = new List<SharedHeightPoint>();
+            List<TerrainSlotData> slots = new List<TerrainSlotData>();
+            int localPointReferenceCount = 0;
+            int reusedPointReferenceCount = 0;
+
+            if (slotRequests != null)
+            {
+                foreach (TerrainSlotBuildRequest slotRequest in slotRequests)
+                {
+                    TerrainSlotData slot = BuildSlot(
+                        slotRequest.Label,
+                        slotRequest.AxialCoordinate,
+                        slotRequest.WorldCenter,
+                        settings,
+                        sharedPointLookup,
+                        sharedPoints,
+                        ref localPointReferenceCount,
+                        ref reusedPointReferenceCount);
+
+                    slots.Add(slot);
+                }
+            }
+
+            BuildNeighborIndices(slots);
+            return new TerrainFrameData(settings, slots, sharedPoints, localPointReferenceCount, reusedPointReferenceCount);
+        }
+
         private static TerrainSlotData BuildSlot(
             Vector2Int axial,
             TerrainFrameSettings settings,
