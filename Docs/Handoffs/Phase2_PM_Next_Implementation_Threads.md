@@ -2,291 +2,73 @@
 
 ## Review Date
 
-2026-07-05
+2026-08-10
 
-## Current PM Update
+## Current Baseline
 
-Review update: 2026-07-20
+The active development baseline is the integrated first-person prototype in:
 
-The next major Phase 2 leg should be player-centered fog / active visibility, not another board-facing construction view.
+- `Assets/LostForest/Scenes/Phase2_GridMovementFogTest.unity`
 
-Important new canon:
+The World's End / Frost Barrier milestone is preserved in commit `7cd7e14` on
+`codex/frost-barrier-sunlight`. Repository and scene cleanup continues on
+`codex/project-cleanup`.
 
-- Hidden Slots and Tiles remain the authoritative structure for gameplay, spawning, debug, and pursuer/rune logic.
-- Player-facing visibility must be based on distance from the player, local fog density, and environmental readability.
-- Crossing a hidden Slot edge must not reveal a whole Tile or Field chunk on the horizon.
-- Active Slot rendering may still use a hidden Slot radius, but it should preload content behind fog.
-- Trees and landmarks should emerge from fog as white or gray silhouettes, then resolve into clearer low-poly forms as the player approaches.
-- Fog should be designed as a living environmental layer with uneven density and later pressure hooks.
+The local workspace should contain one canonical project clone at
+`/Users/klove/Documents/LostForestPhase2`. Do not resume work from detached or
+older milestone worktrees.
 
-Primary architecture note:
+## Completed Prototype Spine
 
-- [Phase2_Player_Centered_Fog_Visibility_Spine](../Architecture/Phase2_Player_Centered_Fog_Visibility_Spine.md)
+- Canonical hidden `26 x 26` Field generation.
+- First-person terrain traversal and active-region rendering.
+- Player-centered fog and forest readability content.
+- Sprint, stamina, chill, frozen, and game-over pressure states.
+- Rune selection, pickup, carry, and Home deposit loop.
+- Home and world landmark prototypes.
+- World's End boundary detection and three-ring Frost Barrier presentation.
+- Frost exposure, movement decline, chill pressure, boundary clamp, and recovery.
 
-Recommended next implementation thread:
+Player-facing presentation must remain a snowy low-poly forest. Hidden Slot,
+Tile, axial, and address data stay available to gameplay and debug systems but
+must not become board-game presentation in the normal player view.
 
-- Player-Centered Fog and Active Region Rendering
+## Next Milestone: Light and Shadow
+
+Start Light and Shadow from the completed cleanup branch, not from the old
+detached Light/Shadow worktree.
 
 Primary goal:
 
-Prove that the player can move through hidden Field/Slot terrain while visual reveal remains seamless, radial, and fog-mediated rather than tile-boundary-driven.
+Make light a readable navigation and pressure language while preserving fog,
+landmarks, runes, terrain readability, and laptop-friendly performance.
+
+Initial scope:
+
+- Establish a stable daylight and ambient baseline in the integrated scene.
+- Make Home and landmark silhouettes readable without exposing the hidden grid.
+- Define a lightweight shadow budget for terrain, trees, landmarks, runes, and
+  frost-ring content.
+- Add Light/Shadow settings through the existing scene bootstrap so repairs are
+  deterministic.
+- Confirm the frost vignette and fog remain readable across the lighting range.
 
 Acceptance checks:
 
-- Player current Slot is still tracked for hidden logic.
-- Active terrain/content can be loaded around the player.
-- The visible world is controlled by player-centered fog bands.
-- Newly loaded trees enter as fog silhouettes, not full-detail pop-ins.
-- Debug mode can reveal current Slot, active Slots, and render state.
-- Player-facing mode shows no Slot labels, Tile IDs, hex outlines, or board-game presentation.
-
-Practical sequencing note:
-
-Because current testing is happening on a laptop, do not chase expensive fog technology before the core loop advances. Stabilize cheap distance fog and the birch readability test enough to preserve the visual spine, then move to gameplay pressure systems such as sprint, stamina, chill/frost, rune pickup/return, and later pursuer pressure. The fog spine should remain integral, but not consume the next several milestones by itself.
-
-## Current Verified Baseline
-
-Phase 2 is correctly positioned as a first-person 3D Unity prototype built over a hidden Frame / Slot / Tile / Field construction layer.
-
-Verified or documented as working:
-
-- Canonical hidden Field generation: `26 x 26`, 676 Slots, 1000 Tile bank, 324 unused Tiles.
-- Tile `000` reserved for player/home spawn.
-- Tile `666` reserved for pursuer/threat origin.
-- Orientation indices `0-5`.
-- Field Slot Report logging with seed `12345`.
-- Dedicated 7-hex terrain frame test using 100m flat-to-flat hexes.
-- Debug display for centers, vertices, edge midpoints, inner points, and hex outlines.
-- Shared point deduplication by world position in the 7-hex terrain frame test.
-
-Production constraint:
-
-- Player-facing experience must be a snowy low-poly first-person forest.
-- Hidden construction and debug overlays may expose grids, points, labels, tile IDs, and reports only in debug/test scenes or debug mode.
-
-## Near-Term Production Goal
-
-Move from hidden construction proof to a walkable 7-hex 3D terrain proof.
-
-The next slice should answer:
-
-Can the project generate a continuous low-poly snowy terrain surface from shared height points, preserve neighbor edge continuity, and allow a first-person player to walk across the center hex and its six neighbors without seeing board-game presentation?
-
-## Thread 1: Shared Height-Point Terrain Data
-
-Purpose:
-
-Turn the current 7-hex debug point display into a reusable terrain data graph.
-
-Implementation status:
-
-- Extracted from `SevenHexTerrainFrameDebugView` into reusable Frame-owned world data classes:
-  - `TerrainFrameSettings`
-  - `TerrainFrameGenerator`
-  - `TerrainFrameData`
-  - `TerrainSlotData`
-- `SevenHexTerrainFrameDebugView` is now a debug renderer/view over generated data.
-- Shared point IDs, local Slot references, Slot neighbor indices, deterministic heights, point kind counts, and shared-boundary reuse are available from the terrain data graph.
-- The Tile conformity proof still reads Frame-owned height points through deterministic position lookup; Tiles and Tile anchors do not own terrain height.
-
-Scope:
-
-- Create a data-backed representation for the radius-1 terrain frame.
-- Store shared height points with stable IDs, kind, world position, height value, and membership in one or more Slots.
-- Preserve the rule that Frame / Slot points / terrain points do not rotate.
-- Assign deterministic prototype heights from seed or simple authored rules.
-- Keep debug spheres and labels as a view of the data, not the source of truth.
-
-Out of scope:
-
-- First-person controller.
-- Rune, stamina, chill, pursuer, or final forest props.
-- Full 26 x 26 terrain generation.
-
-Acceptance checks:
-
-- Rebuilding the 7-hex test creates one shared height-point graph.
-- Boundary points shared by neighboring hexes have one point ID and one height value.
-- Changing a shared boundary point height affects every adjacent hex that uses it.
-- Console report includes point count, Slot count, and shared-boundary validation result.
-- Debug visuals can still show centers, vertices, edge midpoints, inner points, and height labels.
-
-Recommended files / areas:
-
-- `Assets/LostForest/Scripts/World/SharedHeightPoint.cs`
-- `Assets/LostForest/Scripts/World/SevenHexTerrainFrameDebugView.cs`
-- New world data classes under `Assets/LostForest/Scripts/World`
-
-## Thread 2: Walkable 7-Hex Terrain Mesh
-
-Purpose:
-
-Generate an actual low-poly terrain mesh from the shared height-point graph.
-
-Implementation status:
-
-- Added a reusable `HexTerrainMeshBuilder` under `Assets/LostForest/Scripts/World`.
-- Added `HexTerrainCollisionBuilder` so built-in Physics `MeshCollider` creation is owned by the reusable terrain layer instead of the debug view or Tiles.
-- Added `HexTerrainMeshSettings` for surface lift, mesh naming, group naming, optional per-surface collider creation, static marking, and generation reporting.
-- Added `HexTerrainMeshData` / `HexTerrainMeshSurface` reporting for generated surface count, mesh count, vertex count, triangle count, collider count, skipped mesh count, skipped collider count, and collider readiness validation.
-- `SevenHexTerrainFrameDebugView` now calls the builder for terrain surfaces instead of owning mesh topology directly.
-- Generated mesh vertices still come from Frame-owned `SharedHeightPoint.Position` references through `TerrainSlotData`.
-- The current radius-1 test should generate 7 terrain surfaces, 133 mesh vertices, 168 mesh triangles, and 7 optional mesh colliders when terrain surfaces and collider generation are enabled.
-- Collider validation is available from the 7-hex debug view context menu and reports enabled/disabled state, collider count, mesh count, and skipped mesh/collider counts.
-- Manual Unity editor verification is still required after opening or repairing the 7-hex terrain frame scene.
-
-Scope:
-
-- Build a mesh for the center hex plus six neighbors.
-- Use center, vertices, edge midpoints, and inner points as mesh vertices.
-- Apply shared height values consistently across Slot boundaries.
-- Add `MeshFilter`, `MeshRenderer`, and `MeshCollider`.
-- Use a simple snow/prototype material.
-- Keep debug lines and point markers toggleable.
-
-Out of scope:
-
-- Tile content rotation.
-- Trees, rocks, logs, standing stones, runes.
-- Large world streaming.
-
-Acceptance checks:
-
-- The generated surface is visibly 3D and low-poly.
-- No cracks appear between neighboring hexes.
-- A collider exists and matches the generated mesh closely enough for walking tests.
-- Debug outlines can be hidden so the scene reads as terrain, not a board.
-- The scene still supports a debug mode that reveals the hidden construction points.
-
-Recommended files / areas:
-
-- New terrain mesh builder under `Assets/LostForest/Scripts/World`
-- Existing 7-hex terrain frame scene bootstrap
-- Prototype material under `Assets/LostForest/Materials`
-
-## Thread 3: First-Person Walk Test
-
-Implementation status:
-
-- Added `PlayerTerrainRegionTracker` on the first-person player.
-- Added `HomeRegionDefinition` on the Early WalkThru terrain frame object.
-- The Early WalkThru bootstrap wires the tracker to the generated 7-hex frame data and sets Home to the center Slot, axial `(0, 0)`.
-- The tracker resolves the current hidden Terrain Slot by nearest center using horizontal X/Z distance.
-- Console logs now report the starting region and region transitions with current Slot label, axial coordinate, previous Slot, center position, and `IsHome`.
-
-Purpose:
-
-Validate scale, slope feel, and basic movement across the 100m hex terrain.
-
-Scope:
-
-- Add a simple first-person controller with mouse look, walk, sprint placeholder, gravity, and ground detection.
-- Spawn the player at the center/home hex.
-- Test walking across all seven terrain hexes.
-- Add a debug readout or log for current hidden Slot.
-- Evaluate whether 100m flat-to-flat feels correct for embodied navigation.
-
-Out of scope:
-
-- Full stamina/chill economy.
-- Rune interaction.
-- Pursuer behavior.
-- Final camera effects or animation.
-
-Acceptance checks:
-
-- Player starts on the center/home area.
-- Player can traverse from center to every neighboring hex.
-- Player does not fall through boundary seams.
-- Current hidden Slot can be queried for debug.
-- Debug grid/labels can be disabled for a player-facing view.
-
-Recommended files / areas:
-
-- `Assets/LostForest/Scripts/Player`
-- `Assets/LostForest/Scripts/World`
-- `Assets/LostForest/Scripts/Debug`
-
-## Thread 4: Terrain-to-Tile Presentation Boundary
-
-Purpose:
-
-Make the separation between fixed terrain/frame geometry and rotating tile content explicit before props are added.
-
-Scope:
-
-- Define where terrain generation lives versus tile content placement.
-- Add a minimal tile-content anchor model for non-terrain objects.
-- Confirm tile rotation affects content anchors only.
-- Add debug visualization for content anchor rotation.
-- Use the 7-hex scene or a small generated Field slice to prove the rule.
-
-Out of scope:
-
-- Full tile definition authoring.
-- Large prop library.
-- Landmark/rune gameplay.
-
-Acceptance checks:
-
-- Terrain height points and mesh are unchanged when tile rotation changes.
-- Content anchors rotate in 60-degree steps according to tile orientation.
-- Debug output clearly reports Slot, Tile ID, orientation index, and anchor positions.
-- The player-facing terrain remains continuous and natural.
-
-Recommended files / areas:
-
-- `Assets/LostForest/Scripts/Tiles`
-- `Assets/LostForest/Scripts/World`
-- `Docs/Architecture/Phase2_Board_Tile_Construction_Spec.md`
-
-## Thread 5: Home Landmark Placeholder
-
-Purpose:
-
-Create the first player-facing landmark once the walkable terrain slice exists.
-
-Scope:
-
-- Place a simple standing-stone/home site on Tile `000` or the center test Slot.
-- Use low-poly primitive stones or placeholder prefabs.
-- Keep the site visible as a navigational anchor from nearby terrain.
-- Mark it as home in hidden/debug data.
-
-Out of scope:
-
-- Rune deposit mechanics.
-- Final art.
-- Ritual progression effects.
-- Pursuer escalation.
-
-Acceptance checks:
-
-- Standing stones appear in the player-facing view.
-- Hidden/debug state identifies the home Slot / Tile `000`.
-- Debug labels can be toggled without removing the landmark.
-- The landmark does not look like board-game UI.
-
-Recommended files / areas:
-
-- `Assets/LostForest/Scripts/World`
-- `Assets/LostForest/Scripts/Tiles`
-- `Assets/LostForest/Prefabs/StandingStones`
-
-## Recommended Execution Order
-
-1. Shared Height-Point Terrain Data.
-2. Walkable 7-Hex Terrain Mesh.
-3. First-Person Walk Test.
-4. Terrain-to-Tile Presentation Boundary.
-5. Home Landmark Placeholder.
-
-Do not start rune, stamina/chill, or pursuer implementation until the player can walk across a continuous 7-hex terrain slice.
-
-## Management Notes
-
-- Keep the 7-hex test as the active terrain proving ground.
-- Keep full `26 x 26` Field generation intact as the hidden-world proof.
-- Avoid importing Phase 1 board presentation into player-facing scenes.
-- Treat debug visualization as a switchable view over real data.
-- Prefer small vertical slices that can be played in Unity over broad systems with no embodied test.
+- The player can orient toward Home and nearby landmarks using shape and light.
+- Fog still controls reveal distance and does not expose whole hidden Tiles.
+- Frost territory remains visually distinct at the Field edge.
+- Rune and condition feedback remain legible.
+- No visible hex outlines, Tile IDs, Slot addresses, or board presentation appear
+  in the player-facing view.
+- Performance remains suitable for the current laptop target.
+- The integrated scene bootstrap and validation complete without compile or
+  missing-reference errors in a licensed Unity editor session.
+
+## Branch and Scene Discipline
+
+- Create the Light/Shadow branch from the merged `codex/project-cleanup` head.
+- Keep one active integrated prototype scene unless a durable test requires more.
+- Commit one milestone at a time and push it before creating dependent tasks.
+- Treat Git history as the archive for retired milestone scenes.
+- Do not delete or replace the canonical clone while Unity has the project open.
