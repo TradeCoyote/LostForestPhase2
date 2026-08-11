@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using LostForest.Phase2.Core;
 using LostForest.Phase2.Debugging;
 using LostForest.Phase2.Feedback;
 using LostForest.Phase2.Player;
@@ -42,13 +43,15 @@ namespace LostForest.Phase2.Editor
                 out GridDebugHud gridDebugHud,
                 out PlayerFieldTravelLog playerFieldTravelLog,
                 out RuneManager runeManager,
-                out WorldEndFrostController worldEndFrostController);
+                out WorldEndFrostController worldEndFrostController,
+                out RunVictoryController runVictoryController);
             GameObject playerObject = EnsurePlayer(
                 out PlayerGridAddressTracker gridAddressTracker,
                 out PlayerCondition playerCondition,
                 out PlayerTerrainMovementState playerTerrainMovementState,
                 out RuneInteraction runeInteraction);
             Camera playerCamera = playerObject.GetComponentInChildren<Camera>();
+            EarlyWalkThruFirstPersonController firstPersonController = playerObject.GetComponent<EarlyWalkThruFirstPersonController>();
             Light directSun = EnsureLight();
             PrototypeLightingDirector lightingDirector = EnsurePrototypeLighting(directSun);
 
@@ -63,9 +66,12 @@ namespace LostForest.Phase2.Editor
             runeManager.SetCamera(playerCamera);
             activeRegionRenderer.SetRuneManager(runeManager);
             worldEndFrostController.ApplyPrototypeDefaults();
-            playerObject.GetComponent<EarlyWalkThruFirstPersonController>()?.SetWorldEndFrostController(worldEndFrostController);
+            firstPersonController?.SetWorldEndFrostController(worldEndFrostController);
             runeInteraction.SetSources(runeManager, playerCamera);
             runeInteraction.SetInteractionKey(KeyCode.X);
+            runVictoryController.ApplyPrototypeDefaults();
+            runVictoryController.SetSources(runeManager, playerCondition, firstPersonController, runeInteraction, playerCamera);
+            runVictoryController.ResetVictoryState();
             playerFieldTravelLog.SetTracker(gridAddressTracker);
             playerTerrainMovementState.SetSources(gridAddressTracker, activeRegionRenderer);
             gridDebugHud.SetSources(gridAddressTracker, activeRegionRenderer);
@@ -105,6 +111,7 @@ namespace LostForest.Phase2.Editor
             RuneInteraction runeInteraction = UnityObject.FindAnyObjectByType<RuneInteraction>();
             WorldEndFrostController worldEndFrostController = UnityObject.FindAnyObjectByType<WorldEndFrostController>();
             PrototypeLightingDirector lightingDirector = UnityObject.FindAnyObjectByType<PrototypeLightingDirector>();
+            RunVictoryController runVictoryController = UnityObject.FindAnyObjectByType<RunVictoryController>();
 
             if (worldManager == null)
             {
@@ -156,6 +163,11 @@ namespace LostForest.Phase2.Editor
                 throw new InvalidOperationException("Grid Movement validation failed: no PrototypeLightingDirector exists in the scene.");
             }
 
+            if (runVictoryController == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no RunVictoryController exists in the scene.");
+            }
+
             worldManager.InitializeWorld();
             playerTerrainMovementState.SetSources(gridAddressTracker, activeRegionRenderer);
             runeManager.SetPlayer(gridAddressTracker.transform);
@@ -201,9 +213,10 @@ namespace LostForest.Phase2.Editor
             ValidateConditionEconomy(playerCondition);
             ValidateWorldEndFrostPrototype(worldManager, activeRegionRenderer, playerCondition, worldEndFrostController);
             ValidateRunePrototype(worldManager, activeRegionRenderer, runeManager);
+            ValidateVictoryPrototype(runeManager, runVictoryController);
             ValidatePrototypeLighting(lightingDirector);
 
-            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Lighting={lightingDirector.BuildDebugSummary()}");
+            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Victory={runVictoryController.BuildDebugSummary()}, Lighting={lightingDirector.BuildDebugSummary()}");
         }
 
         private static GridMovementWorldManager EnsureWorldManager(
@@ -211,7 +224,8 @@ namespace LostForest.Phase2.Editor
             out GridDebugHud gridDebugHud,
             out PlayerFieldTravelLog playerFieldTravelLog,
             out RuneManager runeManager,
-            out WorldEndFrostController worldEndFrostController)
+            out WorldEndFrostController worldEndFrostController,
+            out RunVictoryController runVictoryController)
         {
             GridMovementWorldManager worldManager = UnityObject.FindAnyObjectByType<GridMovementWorldManager>();
             GameObject worldObject;
@@ -238,6 +252,7 @@ namespace LostForest.Phase2.Editor
             playerFieldTravelLog = GetOrAddComponent<PlayerFieldTravelLog>(worldObject);
             runeManager = GetOrAddComponent<RuneManager>(worldObject);
             worldEndFrostController = GetOrAddComponent<WorldEndFrostController>(worldObject);
+            runVictoryController = GetOrAddComponent<RunVictoryController>(worldObject);
             return worldManager;
         }
 
@@ -618,6 +633,51 @@ namespace LostForest.Phase2.Editor
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no active tree rune markers were spawned.");
             }
+        }
+
+        private static void ValidateVictoryPrototype(RuneManager runeManager, RunVictoryController runVictoryController)
+        {
+            runVictoryController.ResetVictoryState();
+
+            if (!runVictoryController.ValidateConfiguration(out string failureReason))
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: {failureReason}");
+            }
+
+            if (runeManager.IsRunComplete || runeManager.DepositedRuneCount != 0 || runVictoryController.IsVictory)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: victory state was already active before any rune stones were returned.");
+            }
+
+            for (int i = 0; i < runeManager.NeededRuneCount; i++)
+            {
+                char runeLetter = runeManager.GetNeededRuneAt(i);
+
+                if (!runeManager.DepositNeededRuneForValidation(runeLetter))
+                {
+                    throw new InvalidOperationException($"Grid Movement validation failed: could not return rune stone {runeLetter} during victory validation.");
+                }
+
+                bool shouldBeVictory = i == runeManager.NeededRuneCount - 1;
+
+                if (runVictoryController.IsVictory != shouldBeVictory)
+                {
+                    throw new InvalidOperationException($"Grid Movement validation failed: victory state after deposit {i + 1}/{runeManager.NeededRuneCount} was {runVictoryController.IsVictory}, expected {shouldBeVictory}.");
+                }
+            }
+
+            if (!runeManager.IsRunComplete || runeManager.DepositedRuneCount != 3 || !runVictoryController.IsVictory)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: returning all three rune stones did not complete the run. Deposited={runeManager.DepositedRuneCount}, Complete={runeManager.IsRunComplete}, Victory={runVictoryController.IsVictory}.");
+            }
+
+            if (runVictoryController.PlayAgainYesKey != KeyCode.Y || runVictoryController.PlayAgainNoKey != KeyCode.N)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: victory replay prompt must use Y/N, got {runVictoryController.PlayAgainYesKey}/{runVictoryController.PlayAgainNoKey}.");
+            }
+
+            Debug.Log($"Lost Forest Run Victory validation passed: {runVictoryController.BuildDebugSummary()}");
+            runVictoryController.ResetVictoryState();
         }
 
         private static void ValidatePrototypeLighting(PrototypeLightingDirector lightingDirector)

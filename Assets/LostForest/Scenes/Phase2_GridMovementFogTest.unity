@@ -187,6 +187,7 @@ GameObject:
   - component: {fileID: 958355440}
   - component: {fileID: 958355441}
   - component: {fileID: 958355442}
+  - component: {fileID: 958355443}
   m_Layer: 0
   m_Name: Grid Movement World
   m_TagString: Untagged
@@ -401,6 +402,30 @@ MonoBehaviour:
   maximumFillAlpha: 0.72
   logFrostTransitions: 1
   logFrostBarrierClamps: 1
+--- !u!114 &958355443
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958355435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d6fb5d6f8f34d0fa64ed0bc2c97a80a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LostForest.Phase2.Core.RunVictoryController
+  runeManager: {fileID: 958355441}
+  playerCondition: {fileID: 2063129117}
+  firstPersonController: {fileID: 2063129114}
+  runeInteraction: {fileID: 2063129120}
+  targetCamera: {fileID: 1803468284}
+  showVictoryOverlay: 1
+  victoryFadeSeconds: 0.8
+  victoryOverlayColor: {r: 0.025, g: 0.09, b: 0.075, a: 0.9}
+  victoryTextColor: {r: 0.92, g: 0.98, b: 0.96, a: 1}
+  playAgainYesKey: 121
+  playAgainNoKey: 110
+  logVictoryState: 1
 --- !u!1 &1112677417
 GameObject:
   m_ObjectHideFlags: 0

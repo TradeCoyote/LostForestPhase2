@@ -37,6 +37,10 @@ The active scene currently provides:
 - Up to three rendered frost rings outside the Field.
 - Frost exposure, chill pressure, movement decline, boundary clamping, and a
   lingering frost vignette after returning to the Field.
+- A flat overcast lighting baseline with no persistent shadow compass, plus
+  randomized 10-30 second cloud-thinning windows capped at 35% direct sun.
+- A three-rune-stone victory condition that pauses the completed run, shows
+  `You Win`, and offers `Play Again? Y / N`.
 - A debug HUD for hidden Slot, travel, condition, rune, landmark, and frost state.
 
 ## Validation
@@ -51,11 +55,15 @@ clone was created. The reported checks included:
 - Playable movement and terrain grounding.
 - Rune marker and condition state initialization.
 - World's End ring and terrain-elevation sampling.
+- Light/Shadow timing, range, and return-to-overcast behavior.
+- Victory remaining inactive after deposits one and two and triggering on the
+  third returned rune stone.
 
 Terminal batch validation can still stop during Unity licensing initialization.
 That environment failure is separate from project compilation and scene
-validation. After repository cleanup, run the active scene validation from an
-already licensed Unity editor session before merging the cleanup branch.
+validation. The runtime and editor source compile with Unity's project compiler
+references. Run the active scene validation from an already licensed Unity
+editor session before merging the current milestone branch.
 
 ## Operating Rule
 

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using LostForest.Phase2.World;
@@ -57,7 +58,12 @@ namespace LostForest.Phase2.Runes
         private string carriedMarkerKey;
         private int runSeed;
 
+        public event Action<char, int, int> RuneDeposited;
+        public event Action RunCompleted;
+
         public int NeededRuneCount => neededRunes.Count;
+        public int DepositedRuneCount => depositedRunes.Count;
+        public bool IsRunComplete => HasDepositedEveryNeededRune();
         public bool HasCarriedRune => RuneId.IsValidRune(carriedRune);
         public char CarriedRune => carriedRune;
         public string NeededRunesDebugText => JoinRunes(neededRunes, false);
@@ -378,18 +384,64 @@ namespace LostForest.Phase2.Runes
             }
 
             char depositedRune = carriedRune;
-            depositedRunes.Add(depositedRune);
+            CompleteRuneDeposit(depositedRune, socket);
+            return true;
+        }
+
+#if UNITY_EDITOR
+        public bool DepositNeededRuneForValidation(char runeLetter)
+        {
+            char normalized = RuneId.Normalize(runeLetter);
+
+            if (!neededRuneSet.Contains(normalized) || depositedRunes.Contains(normalized))
+            {
+                return false;
+            }
+
+            HomeRuneSocket matchingSocket = null;
+
+            foreach (HomeRuneSocket socket in activeSockets)
+            {
+                if (socket != null && socket.Letter == normalized)
+                {
+                    matchingSocket = socket;
+                    break;
+                }
+            }
+
+            CompleteRuneDeposit(normalized, matchingSocket);
+            return true;
+        }
+#endif
+
+        private void CompleteRuneDeposit(char depositedRune, HomeRuneSocket socket)
+        {
+            if (!depositedRunes.Add(depositedRune))
+            {
+                return;
+            }
+
             carriedRune = RuneId.NoRune;
             carriedMarkerKey = null;
-            socket.SetDeposited(true);
+
+            if (socket != null)
+            {
+                socket.SetDeposited(true);
+            }
+
             RefreshSocketStates();
 
             if (logStateChanges)
             {
-                Debug.Log($"Lost Forest Rune Deposit: Rune={depositedRune}, Deposited={DepositedRunesDebugText}, Carried={CarriedRuneDebugText}", this);
+                Debug.Log($"Lost Forest Rune Deposit: Rune={depositedRune}, Deposited={DepositedRunesDebugText}, Carried={CarriedRuneDebugText}, Complete={IsRunComplete}", this);
             }
 
-            return true;
+            RuneDeposited?.Invoke(depositedRune, DepositedRuneCount, NeededRuneCount);
+
+            if (IsRunComplete)
+            {
+                RunCompleted?.Invoke();
+            }
         }
 
         private RuneTreeMarker FindBestPickupMarker()
@@ -799,6 +851,24 @@ namespace LostForest.Phase2.Runes
             }
 
             return builder.ToString();
+        }
+
+        private bool HasDepositedEveryNeededRune()
+        {
+            if (neededRunes.Count != RequiredRuneTargetCount)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < neededRunes.Count; i++)
+            {
+                if (!depositedRunes.Contains(neededRunes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private string BuildDepositedRunesDebugText()
