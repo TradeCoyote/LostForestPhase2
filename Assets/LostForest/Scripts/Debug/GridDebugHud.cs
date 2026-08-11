@@ -1,4 +1,5 @@
 using LostForest.Phase2.Player;
+using LostForest.Phase2.Feedback;
 using LostForest.Phase2.Runes;
 using LostForest.Phase2.World;
 using UnityEngine;
@@ -17,6 +18,7 @@ namespace LostForest.Phase2.Debugging
         [SerializeField] private PlayerTerrainMovementState playerTerrainMovementState;
         [SerializeField] private ActiveRegionRenderer activeRegionRenderer;
         [SerializeField] private WorldEndFrostController worldEndFrostController;
+        [SerializeField] private PrototypeLightingDirector lightingDirector;
         [SerializeField] private RuneManager runeManager;
         [SerializeField] private Camera targetCamera;
         [SerializeField] private bool showHud = true;
@@ -66,6 +68,11 @@ namespace LostForest.Phase2.Debugging
         public void SetWorldEndFrostController(WorldEndFrostController newWorldEndFrostController)
         {
             worldEndFrostController = newWorldEndFrostController;
+        }
+
+        public void SetLightingDirector(PrototypeLightingDirector newLightingDirector)
+        {
+            lightingDirector = newLightingDirector;
         }
 
         public void SetCamera(Camera newTargetCamera)
@@ -435,9 +442,10 @@ namespace LostForest.Phase2.Debugging
             string movementText = BuildMovementText();
             string conditionText = BuildConditionText();
             string worldEndText = BuildWorldEndText();
+            string lightingText = BuildLightingText();
             string runeText = BuildRuneText();
             string landmarkText = BuildLandmarkText();
-            string text = $"{BuildGridAddressText()}\n{BuildElevationText()}{BuildOptionalLine(movementText)}{BuildOptionalLine(conditionText)}{BuildOptionalLine(worldEndText)}{BuildOptionalLine(runeText)}{BuildOptionalLine(landmarkText)}";
+            string text = $"{BuildGridAddressText()}\n{BuildElevationText()}{BuildOptionalLine(movementText)}{BuildOptionalLine(conditionText)}{BuildOptionalLine(worldEndText)}{BuildOptionalLine(lightingText)}{BuildOptionalLine(runeText)}{BuildOptionalLine(landmarkText)}";
             Vector2 textArea = ResolveCameraLocalPanelSize();
             hudText.SetText(text, textArea * 0.88f);
 
@@ -486,6 +494,16 @@ namespace LostForest.Phase2.Debugging
                 ? string.Empty
                 : $"\nFrost Tiles Active: {activeRegionRenderer.ActiveRenderedFrostTileCount}/{activeRegionRenderer.OuterFrostRenderRings} rings";
             return $"{summary}{frostTiles}";
+        }
+
+        private string BuildLightingText()
+        {
+            if (lightingDirector == null)
+            {
+                lightingDirector = FindAnyObjectByType<PrototypeLightingDirector>();
+            }
+
+            return lightingDirector == null ? string.Empty : lightingDirector.BuildDebugSummary();
         }
 
         private static string BuildOptionalLine(string value)

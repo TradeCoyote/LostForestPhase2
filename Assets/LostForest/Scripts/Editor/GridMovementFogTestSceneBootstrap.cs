@@ -49,6 +49,8 @@ namespace LostForest.Phase2.Editor
                 out PlayerTerrainMovementState playerTerrainMovementState,
                 out RuneInteraction runeInteraction);
             Camera playerCamera = playerObject.GetComponentInChildren<Camera>();
+            Light directSun = EnsureLight();
+            PrototypeLightingDirector lightingDirector = EnsurePrototypeLighting(directSun);
 
             worldManager.SetPlayer(playerObject.transform);
             worldManager.SetActiveRegionRenderer(activeRegionRenderer);
@@ -71,6 +73,7 @@ namespace LostForest.Phase2.Editor
             gridDebugHud.SetPlayerTerrainMovementState(playerTerrainMovementState);
             gridDebugHud.SetRuneManager(runeManager);
             gridDebugHud.SetWorldEndFrostController(worldEndFrostController);
+            gridDebugHud.SetLightingDirector(lightingDirector);
             gridDebugHud.SetCamera(playerCamera);
             gridDebugHud.ApplyCompactDefaults();
             activeRegionRenderer.SetActiveRadius(1);
@@ -78,7 +81,6 @@ namespace LostForest.Phase2.Editor
             activeRegionRenderer.ApplyBroadSlopeTerrainDefaults();
 
             EnsurePrototypeFog();
-            EnsureLight();
 
             Selection.activeGameObject = playerObject;
             EditorSceneManager.MarkSceneDirty(scene);
@@ -102,6 +104,7 @@ namespace LostForest.Phase2.Editor
             RuneManager runeManager = UnityObject.FindAnyObjectByType<RuneManager>();
             RuneInteraction runeInteraction = UnityObject.FindAnyObjectByType<RuneInteraction>();
             WorldEndFrostController worldEndFrostController = UnityObject.FindAnyObjectByType<WorldEndFrostController>();
+            PrototypeLightingDirector lightingDirector = UnityObject.FindAnyObjectByType<PrototypeLightingDirector>();
 
             if (worldManager == null)
             {
@@ -146,6 +149,11 @@ namespace LostForest.Phase2.Editor
             if (worldEndFrostController == null)
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no WorldEndFrostController exists in the scene.");
+            }
+
+            if (lightingDirector == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no PrototypeLightingDirector exists in the scene.");
             }
 
             worldManager.InitializeWorld();
@@ -193,8 +201,9 @@ namespace LostForest.Phase2.Editor
             ValidateConditionEconomy(playerCondition);
             ValidateWorldEndFrostPrototype(worldManager, activeRegionRenderer, playerCondition, worldEndFrostController);
             ValidateRunePrototype(worldManager, activeRegionRenderer, runeManager);
+            ValidatePrototypeLighting(lightingDirector);
 
-            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}");
+            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Lighting={lightingDirector.BuildDebugSummary()}");
         }
 
         private static GridMovementWorldManager EnsureWorldManager(
@@ -337,7 +346,25 @@ namespace LostForest.Phase2.Editor
             }
         }
 
-        private static void EnsureLight()
+        private static PrototypeLightingDirector EnsurePrototypeLighting(Light directSun)
+        {
+            PrototypeLightingDirector lightingDirector = UnityObject.FindAnyObjectByType<PrototypeLightingDirector>();
+
+            if (lightingDirector == null)
+            {
+                GameObject lightingObject = new GameObject("Prototype Light and Shadow Director");
+                lightingDirector = lightingObject.AddComponent<PrototypeLightingDirector>();
+            }
+
+            lightingDirector.gameObject.name = "Prototype Light and Shadow Director";
+            lightingDirector.ApplyPrototypeDefaults();
+            lightingDirector.SetDirectSun(directSun);
+            lightingDirector.CaptureCurrentSunAsReference();
+            lightingDirector.ResetToOvercastAndScheduleNextWindow();
+            return lightingDirector;
+        }
+
+        private static Light EnsureLight()
         {
             Light light = UnityObject.FindAnyObjectByType<Light>();
 
@@ -351,7 +378,11 @@ namespace LostForest.Phase2.Editor
             light.type = LightType.Directional;
             light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
+            light.shadowStrength = 1f;
+            light.color = Color.white;
             light.transform.rotation = Quaternion.Euler(50f, -35f, 0f);
+            RenderSettings.sun = light;
+            return light;
         }
 
         private static void ValidateConditionEconomy(PlayerCondition playerCondition)
@@ -587,6 +618,72 @@ namespace LostForest.Phase2.Editor
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no active tree rune markers were spawned.");
             }
+        }
+
+        private static void ValidatePrototypeLighting(PrototypeLightingDirector lightingDirector)
+        {
+            if (!lightingDirector.ValidateConfiguration(out string failureReason))
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: {failureReason}");
+            }
+
+            lightingDirector.ResetToOvercastAndScheduleNextWindow();
+
+            if (lightingDirector.CurrentState != PrototypeLightingDirector.LightingState.Overcast || lightingDirector.CurrentSunPercent > 0.01f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: lighting should start fully overcast at 0%, got {lightingDirector.CurrentState} {lightingDirector.CurrentSunPercent:0.00}%.");
+            }
+
+            if (lightingDirector.SecondsUntilNextWindow < lightingDirector.IntervalRangeSeconds.x || lightingDirector.SecondsUntilNextWindow > lightingDirector.IntervalRangeSeconds.y)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: first lighting interval was outside range, got {lightingDirector.SecondsUntilNextWindow:0.00}s.");
+            }
+
+            lightingDirector.ForceImmediateCloudThinningWindow();
+
+            if (lightingDirector.CurrentState != PrototypeLightingDirector.LightingState.CloudsThinning)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: forced cloud thinning did not enter the CloudsThinning state, got {lightingDirector.CurrentState}.");
+            }
+
+            if (lightingDirector.TargetSunPercent < lightingDirector.MinimumSunPercent || lightingDirector.TargetSunPercent > lightingDirector.MaximumSunPercent)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: cloud-thinning target was outside allowed sun range, got {lightingDirector.TargetSunPercent:0.00}%.");
+            }
+
+            if (lightingDirector.ActiveWindowSecondsRemaining < lightingDirector.WindowDurationRangeSeconds.x || lightingDirector.ActiveWindowSecondsRemaining > lightingDirector.WindowDurationRangeSeconds.y)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: forced lighting window duration was outside range, got {lightingDirector.ActiveWindowSecondsRemaining:0.00}s.");
+            }
+
+            for (int i = 0; i < 12; i++)
+            {
+                lightingDirector.TickForValidation(1f);
+            }
+
+            if (lightingDirector.CurrentSunPercent <= 0.01f)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: forced cloud-thinning window did not raise sun strength above 0%.");
+            }
+
+            lightingDirector.ForceReturnToOvercast();
+
+            for (int i = 0; i < 30; i++)
+            {
+                lightingDirector.TickForValidation(1f);
+
+                if (lightingDirector.CurrentState == PrototypeLightingDirector.LightingState.Overcast && lightingDirector.CurrentSunPercent <= 0.01f)
+                {
+                    break;
+                }
+            }
+
+            if (lightingDirector.CurrentSunPercent > 0.01f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: lighting director could not return fully to 0%, got {lightingDirector.CurrentSunPercent:0.00}%.");
+            }
+
+            Debug.Log($"Lost Forest Light and Shadow validation passed: {lightingDirector.BuildDebugSummary()}");
         }
 
         private static void ValidateLinearChillStaminaCap(PlayerCondition playerCondition, string reason)
