@@ -29,12 +29,12 @@ namespace LostForest.Phase2.Feedback
 
         [Header("Cloud-Thinning Cycle")]
         [SerializeField] private Vector2 intervalRangeSeconds = new Vector2(120f, 240f);
-        [SerializeField] private Vector2 windowDurationRangeSeconds = new Vector2(30f, 60f);
+        [SerializeField] private Vector2 windowDurationRangeSeconds = new Vector2(10f, 30f);
         [SerializeField] private Vector2 targetHoldRangeSeconds = new Vector2(5f, 12f);
         [SerializeField] private float transitionSpeedPercentPerSecond = 2.8f;
         [SerializeField] private float returnToOvercastSpeedPercentPerSecond = 4.25f;
         [SerializeField, Range(0f, 100f)] private float minimumSunPercent = 10f;
-        [SerializeField, Range(0f, 100f)] private float maximumSunPercent = 50f;
+        [SerializeField, Range(0f, 100f)] private float maximumSunPercent = 35f;
         [SerializeField] private int randomSeed = 20260811;
 
         [Header("Development Debug Commands")]
@@ -82,12 +82,12 @@ namespace LostForest.Phase2.Feedback
         public void ApplyPrototypeDefaults()
         {
             intervalRangeSeconds = new Vector2(120f, 240f);
-            windowDurationRangeSeconds = new Vector2(30f, 60f);
+            windowDurationRangeSeconds = new Vector2(10f, 30f);
             targetHoldRangeSeconds = new Vector2(5f, 12f);
             transitionSpeedPercentPerSecond = 2.8f;
             returnToOvercastSpeedPercentPerSecond = 4.25f;
             minimumSunPercent = 10f;
-            maximumSunPercent = 50f;
+            maximumSunPercent = 35f;
             randomSeed = 20260811;
             overcastAmbientSkyColor = new Color(0.78f, 0.84f, 0.86f, 1f);
             overcastAmbientEquatorColor = new Color(0.64f, 0.70f, 0.72f, 1f);
@@ -146,15 +146,15 @@ namespace LostForest.Phase2.Feedback
                 return false;
             }
 
-            if (windowDurationRangeSeconds.x < 30f || windowDurationRangeSeconds.y > 60f || windowDurationRangeSeconds.x > windowDurationRangeSeconds.y)
+            if (windowDurationRangeSeconds.x < 10f || windowDurationRangeSeconds.y > 30f || windowDurationRangeSeconds.x > windowDurationRangeSeconds.y)
             {
-                failureReason = $"Lighting director window duration must stay within 30-60 seconds, got {windowDurationRangeSeconds.x:0.0}-{windowDurationRangeSeconds.y:0.0}.";
+                failureReason = $"Lighting director window duration must stay within 10-30 seconds, got {windowDurationRangeSeconds.x:0.0}-{windowDurationRangeSeconds.y:0.0}.";
                 return false;
             }
 
-            if (minimumSunPercent < 10f || maximumSunPercent > 50f || minimumSunPercent > maximumSunPercent)
+            if (minimumSunPercent < 10f || maximumSunPercent > 35f || minimumSunPercent > maximumSunPercent)
             {
-                failureReason = $"Lighting director sun range must stay inside 10-50%, got {minimumSunPercent:0.0}-{maximumSunPercent:0.0}.";
+                failureReason = $"Lighting director sun range must stay inside 10-35%, got {minimumSunPercent:0.0}-{maximumSunPercent:0.0}.";
                 return false;
             }
 

@@ -644,12 +644,12 @@ MonoBehaviour:
   overcastAmbientIntensity: 1.05
   overcastSubtractiveShadowColor: {r: 0.78, g: 0.84, b: 0.88, a: 1}
   intervalRangeSeconds: {x: 120, y: 240}
-  windowDurationRangeSeconds: {x: 30, y: 60}
+  windowDurationRangeSeconds: {x: 10, y: 30}
   targetHoldRangeSeconds: {x: 5, y: 12}
   transitionSpeedPercentPerSecond: 2.8
   returnToOvercastSpeedPercentPerSecond: 4.25
   minimumSunPercent: 10
-  maximumSunPercent: 50
+  maximumSunPercent: 35
   randomSeed: 20260811
   enableDevelopmentHotkeys: 1
   forceCloudThinningKey: 286
