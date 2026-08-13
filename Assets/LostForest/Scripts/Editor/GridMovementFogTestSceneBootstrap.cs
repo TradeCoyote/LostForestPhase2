@@ -62,6 +62,7 @@ namespace LostForest.Phase2.Editor
             worldManager.SetGridDebugHud(gridDebugHud);
             worldManager.SetRuneManager(runeManager);
             worldManager.SetWorldEndFrostController(worldEndFrostController);
+            worldManager.ApplyOpeningViewDefaults();
             runeManager.SetPlayer(playerObject.transform);
             runeManager.SetCamera(playerCamera);
             activeRegionRenderer.SetRuneManager(runeManager);
@@ -85,8 +86,10 @@ namespace LostForest.Phase2.Editor
             activeRegionRenderer.SetActiveRadius(1);
             activeRegionRenderer.SetOuterFrostRenderRings(3);
             activeRegionRenderer.ApplyBroadSlopeTerrainDefaults();
+            activeRegionRenderer.ApplyHiddenBoundaryVisualDefaults();
 
-            EnsurePrototypeFog();
+            PrototypeFogDirector fogDirector = EnsurePrototypeFog();
+            fogDirector.ResetToNormalAndScheduleNextWhiteout();
 
             Selection.activeGameObject = playerObject;
             EditorSceneManager.MarkSceneDirty(scene);
@@ -111,6 +114,7 @@ namespace LostForest.Phase2.Editor
             RuneInteraction runeInteraction = UnityObject.FindAnyObjectByType<RuneInteraction>();
             WorldEndFrostController worldEndFrostController = UnityObject.FindAnyObjectByType<WorldEndFrostController>();
             PrototypeLightingDirector lightingDirector = UnityObject.FindAnyObjectByType<PrototypeLightingDirector>();
+            PrototypeFogDirector fogDirector = UnityObject.FindAnyObjectByType<PrototypeFogDirector>();
             RunVictoryController runVictoryController = UnityObject.FindAnyObjectByType<RunVictoryController>();
 
             if (worldManager == null)
@@ -163,6 +167,11 @@ namespace LostForest.Phase2.Editor
                 throw new InvalidOperationException("Grid Movement validation failed: no PrototypeLightingDirector exists in the scene.");
             }
 
+            if (fogDirector == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no PrototypeFogDirector exists in the scene.");
+            }
+
             if (runVictoryController == null)
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no RunVictoryController exists in the scene.");
@@ -181,6 +190,20 @@ namespace LostForest.Phase2.Editor
             if (worldManager.HomeSlot == null || worldManager.HomeSlot.TileId != FrameSettings.PlayerHomeTileId)
             {
                 throw new InvalidOperationException("Grid Movement validation failed: Home Slot / Tile 000 was not resolved.");
+            }
+
+            Vector3 expectedOpeningPosition = worldManager.HomeSlot.WorldCenter + Vector3.back * 5f;
+            Vector2 actualOpeningPosition = new Vector2(gridAddressTracker.transform.position.x, gridAddressTracker.transform.position.z);
+            Vector2 expectedOpeningPlanarPosition = new Vector2(expectedOpeningPosition.x, expectedOpeningPosition.z);
+
+            if (Mathf.Abs(worldManager.OpeningViewBackwardOffsetMeters - 5f) > 0.001f || Vector2.Distance(actualOpeningPosition, expectedOpeningPlanarPosition) > 0.05f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: opening view must begin 5 meters behind Home. Offset={worldManager.OpeningViewBackwardOffsetMeters:0.00}m, Actual=({actualOpeningPosition.x:0.00},{actualOpeningPosition.y:0.00}), Expected=({expectedOpeningPlanarPosition.x:0.00},{expectedOpeningPlanarPosition.y:0.00}).");
+            }
+
+            if (Vector3.Dot(gridAddressTracker.transform.forward, Vector3.forward) < 0.999f)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: opening view is not centered toward the Home stones.");
             }
 
             if (!activeRegionRenderer.TryGetRenderedSlot(worldManager.HomeSlot, out RenderedSlotInstance homeInstance) || homeInstance == null)
@@ -215,8 +238,10 @@ namespace LostForest.Phase2.Editor
             ValidateRunePrototype(worldManager, activeRegionRenderer, runeManager);
             ValidateVictoryPrototype(runeManager, runVictoryController);
             ValidatePrototypeLighting(lightingDirector);
+            ValidatePrototypeFog(fogDirector);
+            ValidateTerrainExtremesAndHiddenBoundary(activeRegionRenderer);
 
-            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Victory={runVictoryController.BuildDebugSummary()}, Lighting={lightingDirector.BuildDebugSummary()}");
+            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Victory={runVictoryController.BuildDebugSummary()}, Lighting={lightingDirector.BuildDebugSummary()}, Fog={fogDirector.BuildDebugSummary()}, ExtremeSpots={activeRegionRenderer.ExtremeHeightSpotFraction * 100f:0.0}% x{activeRegionRenderer.ExtremeHeightMultiplier:0.00}, HiddenBoundary={activeRegionRenderer.BoundaryVisualsMatchPlayableForest}");
         }
 
         private static GridMovementWorldManager EnsureWorldManager(
@@ -317,6 +342,7 @@ namespace LostForest.Phase2.Editor
 
             fogDirector.gameObject.name = "Prototype Distance Fog Director";
             fogDirector.ApplyEarlyFogDefaults();
+            fogDirector.ResetToNormalAndScheduleNextWhiteout();
             fogDirector.ApplyFogSettings();
             return fogDirector;
         }
@@ -658,6 +684,8 @@ namespace LostForest.Phase2.Editor
                     throw new InvalidOperationException($"Grid Movement validation failed: could not return rune stone {runeLetter} during victory validation.");
                 }
 
+                runVictoryController.EvaluateRunCompletion();
+
                 bool shouldBeVictory = i == runeManager.NeededRuneCount - 1;
 
                 if (runVictoryController.IsVictory != shouldBeVictory)
@@ -674,6 +702,11 @@ namespace LostForest.Phase2.Editor
             if (runVictoryController.PlayAgainYesKey != KeyCode.Y || runVictoryController.PlayAgainNoKey != KeyCode.N)
             {
                 throw new InvalidOperationException($"Grid Movement validation failed: victory replay prompt must use Y/N, got {runVictoryController.PlayAgainYesKey}/{runVictoryController.PlayAgainNoKey}.");
+            }
+
+            if (runVictoryController.OpeningSceneName != "MainPlayScreenLoop")
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: victory replay must return to MainPlayScreenLoop, got '{runVictoryController.OpeningSceneName}'.");
             }
 
             Debug.Log($"Lost Forest Run Victory validation passed: {runVictoryController.BuildDebugSummary()}");
@@ -744,6 +777,194 @@ namespace LostForest.Phase2.Editor
             }
 
             Debug.Log($"Lost Forest Light and Shadow validation passed: {lightingDirector.BuildDebugSummary()}");
+        }
+
+        private static void ValidatePrototypeFog(PrototypeFogDirector fogDirector)
+        {
+            if (!fogDirector.ValidateConfiguration(out string failureReason))
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: {failureReason}");
+            }
+
+            fogDirector.ResetToNormalAndScheduleNextWhiteout();
+
+            if (fogDirector.CurrentState != PrototypeFogDirector.FogCycleState.Normal || fogDirector.CurrentWhiteoutIntensity > 0.001f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: fog should start normal, got {fogDirector.CurrentState} at {fogDirector.CurrentWhiteoutIntensity * 100f:0.0}% whiteout.");
+            }
+
+            if (fogDirector.SecondsUntilNextWhiteout < fogDirector.WhiteoutIntervalRangeSeconds.x || fogDirector.SecondsUntilNextWhiteout > fogDirector.WhiteoutIntervalRangeSeconds.y)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: first whiteout interval was outside 360-720 seconds, got {fogDirector.SecondsUntilNextWhiteout:0.00}s.");
+            }
+
+            float initialNormalEndDistance = fogDirector.CurrentNormalFogEndDistanceMeters;
+            fogDirector.TickForValidation(5f);
+
+            if (fogDirector.CurrentNormalFogEndDistanceMeters < fogDirector.NormalFogEndDistanceRangeMeters.x || fogDirector.CurrentNormalFogEndDistanceMeters > fogDirector.NormalFogEndDistanceRangeMeters.y)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: normal fog wandered outside 50-70 meters, got {fogDirector.CurrentNormalFogEndDistanceMeters:0.00}m.");
+            }
+
+            if (Mathf.Abs(fogDirector.CurrentNormalFogEndDistanceMeters - initialNormalEndDistance) <= 0.01f)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: normal fog did not begin its slow 50-70 meter waver.");
+            }
+
+            fogDirector.ForceImmediateWhiteout();
+            fogDirector.TickForValidation(fogDirector.WhiteoutFadeInSeconds + 0.1f);
+
+            if (fogDirector.CurrentState != PrototypeFogDirector.FogCycleState.Whiteout || fogDirector.CurrentWhiteoutIntensity < 0.999f || fogDirector.CurrentAppliedFogEndDistanceMeters > 1f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: forced fog did not reach zero-visibility whiteout. State={fogDirector.CurrentState}, Intensity={fogDirector.CurrentWhiteoutIntensity:0.000}, End={fogDirector.CurrentAppliedFogEndDistanceMeters:0.00}m.");
+            }
+
+            if (fogDirector.WhiteoutHoldSecondsRemaining < fogDirector.WhiteoutHoldRangeSeconds.x || fogDirector.WhiteoutHoldSecondsRemaining > fogDirector.WhiteoutHoldRangeSeconds.y)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: whiteout hold was outside 30-60 seconds, got {fogDirector.WhiteoutHoldSecondsRemaining:0.00}s.");
+            }
+
+            if (fogDirector.WhiteoutGlimpseCount < 1 || fogDirector.WhiteoutGlimpseCount > 2)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: whiteout must schedule one or two wavering views, got {fogDirector.WhiteoutGlimpseCount}.");
+            }
+
+            int expectedGlimpseCount = fogDirector.WhiteoutGlimpseCount;
+            int observedGlimpseCount = 0;
+            bool insideGlimpse = false;
+            float strongestVisibilityReturn = 0f;
+            int safetyTicks = 0;
+
+            while (fogDirector.CurrentState == PrototypeFogDirector.FogCycleState.Whiteout && safetyTicks < 700)
+            {
+                fogDirector.TickForValidation(0.1f);
+                safetyTicks++;
+
+                if (fogDirector.CurrentState != PrototypeFogDirector.FogCycleState.Whiteout)
+                {
+                    continue;
+                }
+
+                float glimpseVisibility = fogDirector.CurrentWhiteoutGlimpseVisibility;
+                strongestVisibilityReturn = Mathf.Max(strongestVisibilityReturn, glimpseVisibility);
+                bool glimpseVisible = glimpseVisibility > 0.005f;
+
+                if (glimpseVisible && !insideGlimpse)
+                {
+                    observedGlimpseCount++;
+                }
+
+                insideGlimpse = glimpseVisible;
+            }
+
+            if (observedGlimpseCount != expectedGlimpseCount || strongestVisibilityReturn < 0.095f || strongestVisibilityReturn > 0.105f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: whiteout wavering views were incorrect. Scheduled={expectedGlimpseCount}, Observed={observedGlimpseCount}, StrongestVisibility={strongestVisibilityReturn * 100f:0.0}%.");
+            }
+
+            if (fogDirector.CurrentState != PrototypeFogDirector.FogCycleState.Clearing || fogDirector.CurrentWhiteoutIntensity < 0.999f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: whiteout did not return to full white after its wavering views. State={fogDirector.CurrentState}, Intensity={fogDirector.CurrentWhiteoutIntensity:0.000}.");
+            }
+
+            fogDirector.ForceReturnToNormal();
+            fogDirector.TickForValidation(13f);
+
+            if (fogDirector.CurrentState != PrototypeFogDirector.FogCycleState.Normal || fogDirector.CurrentWhiteoutIntensity > 0.001f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: fog could not clear back to normal, got {fogDirector.CurrentState} at {fogDirector.CurrentWhiteoutIntensity * 100f:0.0}%.");
+            }
+
+            Debug.Log($"Lost Forest Fog validation passed: WaveringViews={observedGlimpseCount}/{expectedGlimpseCount}, PeakVisibility={strongestVisibilityReturn * 100f:0.0}%. {fogDirector.BuildDebugSummary()}");
+            fogDirector.ResetToNormalAndScheduleNextWhiteout();
+        }
+
+        private static void ValidateTerrainExtremesAndHiddenBoundary(ActiveRegionRenderer activeRegionRenderer)
+        {
+            if (activeRegionRenderer.ExtremeHeightSpotFraction < 0.2f || activeRegionRenderer.ExtremeHeightSpotFraction > 0.25f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: extreme terrain selection must remain between 20-25%, got {activeRegionRenderer.ExtremeHeightSpotFraction * 100f:0.0}%.");
+            }
+
+            if (Mathf.Abs(activeRegionRenderer.ExtremeHeightMultiplier - 1.3f) > 0.001f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: selected terrain extremes must use a 30% multiplier, got x{activeRegionRenderer.ExtremeHeightMultiplier:0.000}.");
+            }
+
+            if (!activeRegionRenderer.BoundaryVisualsMatchPlayableForest)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: out-of-bounds terrain or tree colors still differ from the playable forest.");
+            }
+
+            TerrainFrameSettings baselineSettings = new TerrainFrameSettings(
+                100f,
+                4242,
+                42f,
+                1.35f,
+                0.0034f,
+                0.0022f,
+                Vector3.zero,
+                0f,
+                1f,
+                2.4f);
+            TerrainFrameSettings boostedSettings = new TerrainFrameSettings(
+                100f,
+                4242,
+                42f,
+                1.35f,
+                0.0034f,
+                0.0022f,
+                Vector3.zero,
+                activeRegionRenderer.ExtremeHeightSpotFraction,
+                activeRegionRenderer.ExtremeHeightMultiplier,
+                2.4f);
+            int eligibleHighOrLowSamples = 0;
+            int boostedSamples = 0;
+            bool boostedHighFound = false;
+            bool boostedLowFound = false;
+            float strongestMultiplier = 1f;
+
+            for (int z = -1800; z <= 1800; z += 60)
+            {
+                for (int x = -1800; x <= 1800; x += 60)
+                {
+                    Vector3 position = new Vector3(x, 0f, z);
+                    float baselineHeight = TerrainFrameGenerator.GetLogicalHeightAtWorldPosition(position, baselineSettings);
+
+                    if (Mathf.Abs(baselineHeight) < 5f)
+                    {
+                        continue;
+                    }
+
+                    eligibleHighOrLowSamples++;
+                    float boostedHeight = TerrainFrameGenerator.GetLogicalHeightAtWorldPosition(position, boostedSettings);
+                    float multiplier = Mathf.Abs(boostedHeight) / Mathf.Max(0.001f, Mathf.Abs(baselineHeight));
+                    strongestMultiplier = Mathf.Max(strongestMultiplier, multiplier);
+
+                    if (multiplier <= 1.005f)
+                    {
+                        continue;
+                    }
+
+                    boostedSamples++;
+                    boostedHighFound |= baselineHeight > 0f;
+                    boostedLowFound |= baselineHeight < 0f;
+                }
+            }
+
+            float boostedFraction = eligibleHighOrLowSamples <= 0 ? 0f : boostedSamples / (float)eligibleHighOrLowSamples;
+
+            if (boostedFraction < 0.16f || boostedFraction > 0.30f || !boostedHighFound || !boostedLowFound)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: selective terrain boost did not affect the expected minority of highs and lows. Boosted={boostedFraction * 100f:0.0}%, High={boostedHighFound}, Low={boostedLowFound}.");
+            }
+
+            if (strongestMultiplier > activeRegionRenderer.ExtremeHeightMultiplier + 0.001f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: terrain boost exceeded 30%, strongest x{strongestMultiplier:0.000}.");
+            }
+
+            Debug.Log($"Lost Forest terrain and hidden-boundary validation passed: BoostedHighLowSamples={boostedFraction * 100f:0.0}%, Strongest=x{strongestMultiplier:0.00}, BoundaryColorsMatch={activeRegionRenderer.BoundaryVisualsMatchPlayableForest}.");
         }
 
         private static void ValidateLinearChillStaminaCap(PlayerCondition playerCondition, string reason)

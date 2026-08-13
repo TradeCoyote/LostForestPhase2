@@ -29,6 +29,9 @@ namespace LostForest.Phase2.World
         [SerializeField] private float visualHeightMultiplier = 1.35f;
         [SerializeField] private float broadHeightScale = 0.0034f;
         [SerializeField] private float noiseHeightScale = 0.0022f;
+        [SerializeField, Range(0.2f, 0.25f)] private float extremeHeightSpotFraction = 0.225f;
+        [SerializeField, Range(1f, 1.5f)] private float extremeHeightMultiplier = 1.3f;
+        [SerializeField] private float extremeHeightPatchSizeInHexes = 2.4f;
 
         [Header("Placeholder Forest Content")]
         [SerializeField] private bool showPlaceholderForestContent = true;
@@ -107,6 +110,12 @@ namespace LostForest.Phase2.World
         public Vector2Int CurrentRenderCenterAxial { get; private set; }
         public bool IsRenderingAroundFrostCenter { get; private set; }
         public IReadOnlyDictionary<string, RenderedSlotInstance> RenderedSlots => renderedSlots;
+        public float ExtremeHeightSpotFraction => Mathf.Clamp(extremeHeightSpotFraction, 0.2f, 0.25f);
+        public float ExtremeHeightMultiplier => Mathf.Clamp(extremeHeightMultiplier, 1f, 1.5f);
+        public bool BoundaryVisualsMatchPlayableForest =>
+            ColorsApproximatelyEqual(outerFrostTerrainColor, terrainSurfaceColor) &&
+            ColorsApproximatelyEqual(outerFrostTreeTrunkColor, placeholderTreeTrunkColor) &&
+            ColorsApproximatelyEqual(outerFrostBarkBandColor, placeholderBarkBandColor);
 
         public void SetRuneManager(RuneManager newRuneManager)
         {
@@ -139,6 +148,16 @@ namespace LostForest.Phase2.World
             visualHeightMultiplier = 1.35f;
             broadHeightScale = 0.0034f;
             noiseHeightScale = 0.0022f;
+            extremeHeightSpotFraction = 0.225f;
+            extremeHeightMultiplier = 1.3f;
+            extremeHeightPatchSizeInHexes = 2.4f;
+        }
+
+        public void ApplyHiddenBoundaryVisualDefaults()
+        {
+            outerFrostTerrainColor = terrainSurfaceColor;
+            outerFrostTreeTrunkColor = placeholderTreeTrunkColor;
+            outerFrostBarkBandColor = placeholderBarkBandColor;
         }
 
         public void RenderAround(FieldSlotData centerSlot)
@@ -677,7 +696,10 @@ namespace LostForest.Phase2.World
                 visualHeightMultiplier,
                 broadHeightScale,
                 noiseHeightScale,
-                GetHomeWorldCenter());
+                GetHomeWorldCenter(),
+                ExtremeHeightSpotFraction,
+                ExtremeHeightMultiplier,
+                extremeHeightPatchSizeInHexes);
         }
 
         private HexTerrainMeshSettings CreateTerrainMeshSettings()
@@ -987,6 +1009,14 @@ namespace LostForest.Phase2.World
             material.name = name;
             material.color = color;
             return material;
+        }
+
+        private static bool ColorsApproximatelyEqual(Color left, Color right)
+        {
+            return Mathf.Abs(left.r - right.r) <= 0.001f &&
+                Mathf.Abs(left.g - right.g) <= 0.001f &&
+                Mathf.Abs(left.b - right.b) <= 0.001f &&
+                Mathf.Abs(left.a - right.a) <= 0.001f;
         }
 
         private static Shader FindShader(string preferredShader)

@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/LostForest/Scenes/MainPlayScreenLoop.unity
+    guid: a98d7bce9e54a483dbfda9388b3af0a2
+  - enabled: 1
     path: Assets/LostForest/Scenes/Phase2_GridMovementFogTest.unity
     guid: 07cdf7997470b43ce8e9f54791871368
   m_configObjects: {}

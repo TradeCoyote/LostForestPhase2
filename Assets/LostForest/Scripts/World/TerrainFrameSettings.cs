@@ -14,6 +14,9 @@ namespace LostForest.Phase2.World
         [SerializeField] private float visualHeightMultiplier = 1.35f;
         [SerializeField] private float broadHeightScale = 0.0034f;
         [SerializeField] private float noiseHeightScale = 0.0022f;
+        [SerializeField, Range(0f, 1f)] private float extremeHeightSpotFraction = 0.225f;
+        [SerializeField] private float extremeHeightMultiplier = 1.3f;
+        [SerializeField] private float extremeHeightPatchSizeInHexes = 2.4f;
         [SerializeField] private Vector3 homeWorldCenter = Vector3.zero;
 
         public TerrainFrameSettings()
@@ -26,7 +29,10 @@ namespace LostForest.Phase2.World
             float heightAmplitudeMeters,
             float visualHeightMultiplier,
             float broadHeightScale,
-            float noiseHeightScale)
+            float noiseHeightScale,
+            float extremeHeightSpotFraction = 0.225f,
+            float extremeHeightMultiplier = 1.3f,
+            float extremeHeightPatchSizeInHexes = 2.4f)
             : this(
                 hexFlatToFlatMeters,
                 heightSeed,
@@ -34,7 +40,10 @@ namespace LostForest.Phase2.World
                 visualHeightMultiplier,
                 broadHeightScale,
                 noiseHeightScale,
-                Vector3.zero)
+                Vector3.zero,
+                extremeHeightSpotFraction,
+                extremeHeightMultiplier,
+                extremeHeightPatchSizeInHexes)
         {
         }
 
@@ -45,7 +54,10 @@ namespace LostForest.Phase2.World
             float visualHeightMultiplier,
             float broadHeightScale,
             float noiseHeightScale,
-            Vector3 homeWorldCenter)
+            Vector3 homeWorldCenter,
+            float extremeHeightSpotFraction = 0.225f,
+            float extremeHeightMultiplier = 1.3f,
+            float extremeHeightPatchSizeInHexes = 2.4f)
         {
             this.hexFlatToFlatMeters = hexFlatToFlatMeters;
             this.heightSeed = heightSeed;
@@ -53,6 +65,9 @@ namespace LostForest.Phase2.World
             this.visualHeightMultiplier = visualHeightMultiplier;
             this.broadHeightScale = broadHeightScale;
             this.noiseHeightScale = noiseHeightScale;
+            this.extremeHeightSpotFraction = extremeHeightSpotFraction;
+            this.extremeHeightMultiplier = extremeHeightMultiplier;
+            this.extremeHeightPatchSizeInHexes = extremeHeightPatchSizeInHexes;
             this.homeWorldCenter = homeWorldCenter;
         }
 
@@ -63,6 +78,9 @@ namespace LostForest.Phase2.World
         public float VisualHeightMultiplier => Mathf.Max(0f, visualHeightMultiplier);
         public float BroadHeightScale => broadHeightScale;
         public float NoiseHeightScale => noiseHeightScale;
+        public float ExtremeHeightSpotFraction => Mathf.Clamp01(extremeHeightSpotFraction);
+        public float ExtremeHeightMultiplier => Mathf.Max(1f, extremeHeightMultiplier);
+        public float ExtremeHeightPatchSizeInHexes => Mathf.Max(0.5f, extremeHeightPatchSizeInHexes);
         public Vector3 HomeWorldCenter => homeWorldCenter;
     }
 }

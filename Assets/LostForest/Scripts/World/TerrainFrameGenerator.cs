@@ -452,9 +452,18 @@ namespace LostForest.Phase2.World
                 + lowCorridor
                 + mesa
                 + detail;
+            float baseNormalizedHeight = Mathf.Clamp(normalizedHeight, -1f, 1f);
+            float extremeSpotInfluence = GetExtremeHeightSpotInfluence(planar, settings, flatWidth);
+            float homeProtection = Smooth01((distanceFromHome - flatWidth * 1.5f) / (flatWidth * 1.5f));
+            float highOrLowStrength = Smooth01((Mathf.Abs(baseNormalizedHeight) - 0.12f) / 0.18f);
+            float extremeBoostInfluence = extremeSpotInfluence * homeProtection * highOrLowStrength;
+            float boostedNormalizedHeight = baseNormalizedHeight * Mathf.Lerp(
+                1f,
+                settings.ExtremeHeightMultiplier,
+                extremeBoostInfluence);
 
             return new HeightProfile(
-                Mathf.Clamp(normalizedHeight, -1f, 1f),
+                boostedNormalizedHeight,
                 settings.HeightAmplitudeMeters,
                 homeBasinStrength,
                 outerRiseStrength,
@@ -465,6 +474,63 @@ namespace LostForest.Phase2.World
                 mesaTopStrength,
                 distanceFromHome,
                 flatWidth);
+        }
+
+        private static float GetExtremeHeightSpotInfluence(Vector2 planarPosition, TerrainFrameSettings settings, float flatWidth)
+        {
+            float selectedFraction = settings.ExtremeHeightSpotFraction;
+            if (selectedFraction <= 0f || settings.ExtremeHeightMultiplier <= 1f)
+            {
+                return 0f;
+            }
+
+            float cellSize = Mathf.Max(1f, flatWidth * settings.ExtremeHeightPatchSizeInHexes);
+            int originX = Mathf.FloorToInt(planarPosition.x / cellSize);
+            int originY = Mathf.FloorToInt(planarPosition.y / cellSize);
+            float strongestInfluence = 0f;
+
+            for (int offsetY = -1; offsetY <= 1; offsetY++)
+            {
+                for (int offsetX = -1; offsetX <= 1; offsetX++)
+                {
+                    int cellX = originX + offsetX;
+                    int cellY = originY + offsetY;
+
+                    if (GetStableCellValue01(cellX, cellY, settings.HeightSeed, 719) > selectedFraction)
+                    {
+                        continue;
+                    }
+
+                    float jitterX = (GetStableCellValue01(cellX, cellY, settings.HeightSeed, 1103) - 0.5f) * cellSize * 0.4f;
+                    float jitterY = (GetStableCellValue01(cellX, cellY, settings.HeightSeed, 1597) - 0.5f) * cellSize * 0.4f;
+                    Vector2 spotCenter = new Vector2(
+                        (cellX + 0.5f) * cellSize + jitterX,
+                        (cellY + 0.5f) * cellSize + jitterY);
+                    float normalizedDistance = Vector2.Distance(planarPosition, spotCenter) / (cellSize * 0.58f);
+                    float influence = 1f - Smooth01((normalizedDistance - 0.28f) / 0.72f);
+                    strongestInfluence = Mathf.Max(strongestInfluence, influence);
+                }
+            }
+
+            return strongestInfluence;
+        }
+
+        private static float GetStableCellValue01(int cellX, int cellY, int seed, int salt)
+        {
+            unchecked
+            {
+                int hash = 23;
+                hash = hash * 397 + cellX;
+                hash = hash * 397 + cellY;
+                hash = hash * 397 + seed;
+                hash = hash * 397 + salt;
+                hash ^= hash >> 16;
+                hash *= -2048144789;
+                hash ^= hash >> 13;
+                hash *= -1028477387;
+                hash ^= hash >> 16;
+                return (hash & 0x7fffffff) / (float)int.MaxValue;
+            }
         }
 
         private static Vector2 ToPlanar(Vector3 position)

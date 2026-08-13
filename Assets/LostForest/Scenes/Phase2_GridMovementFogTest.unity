@@ -154,9 +154,26 @@ MonoBehaviour:
   fogColor: {r: 0.88, g: 0.94, b: 0.97, a: 1}
   fogStartDistanceMeters: 5
   fogEndDistanceMeters: 70
+  normalFogEndDistanceRangeMeters: {x: 50, y: 70}
+  normalFogWaverSpeedMetersPerSecond: 0.35
   exponentialDensity: 0.02
+  whiteoutIntervalRangeSeconds: {x: 360, y: 720}
+  whiteoutHoldRangeSeconds: {x: 30, y: 60}
+  whiteoutFadeInSeconds: 15
+  whiteoutFadeOutSeconds: 12
+  whiteoutFogStartDistanceMeters: 0
+  whiteoutFogEndDistanceMeters: 0.65
+  whiteoutFogColor: {r: 0.985, g: 0.995, b: 1, a: 1}
+  randomSeed: 20260812
+  whiteoutGlimpseCountRange: {x: 1, y: 2}
+  whiteoutGlimpseDurationRangeSeconds: {x: 5, y: 7}
+  whiteoutGlimpseVisibilityFraction: 0.1
+  whiteoutGlimpseTimingJitter: 0.04
   tintMainCameraBackground: 1
   forceSolidFogBackground: 1
+  enableDevelopmentHotkeys: 1
+  forceWhiteoutKey: 286
+  forceClearKey: 287
 --- !u!4 &646401645
 Transform:
   m_ObjectHideFlags: 0
@@ -249,6 +266,9 @@ MonoBehaviour:
   visualHeightMultiplier: 1.35
   broadHeightScale: 0.0034
   noiseHeightScale: 0.0022
+  extremeHeightSpotFraction: 0.225
+  extremeHeightMultiplier: 1.3
+  extremeHeightPatchSizeInHexes: 2.4
   showPlaceholderForestContent: 1
   placeholderContentSeed: 2026
   showOuterFrostTiles: 1
@@ -266,9 +286,9 @@ MonoBehaviour:
   placeholderHomeTreeColor: {r: 0.93, g: 0.95, b: 0.9, a: 1}
   placeholderThreatTreeColor: {r: 0.13, g: 0.14, b: 0.15, a: 1}
   placeholderBarkBandColor: {r: 0.045, g: 0.047, b: 0.045, a: 1}
-  outerFrostTerrainColor: {r: 0.78, g: 0.91, b: 1, a: 1}
-  outerFrostTreeTrunkColor: {r: 0.76, g: 0.91, b: 0.98, a: 1}
-  outerFrostBarkBandColor: {r: 0.42, g: 0.58, b: 0.68, a: 1}
+  outerFrostTerrainColor: {r: 0.92, g: 0.96, b: 1, a: 1}
+  outerFrostTreeTrunkColor: {r: 0.91, g: 0.94, b: 0.91, a: 1}
+  outerFrostBarkBandColor: {r: 0.045, g: 0.047, b: 0.045, a: 1}
   homeStoneColor: {r: 0, g: 0, b: 0, a: 1}
   landmarkWhiteStoneColor: {r: 0.96, g: 0.97, b: 0.96, a: 1}
   landmarkVeryLightStoneColor: {r: 0.82, g: 0.84, b: 0.82, a: 1}
@@ -307,6 +327,7 @@ MonoBehaviour:
   worldEndFrostController: {fileID: 958355442}
   footClearanceMeters: 0.18
   faceTowardPositiveZOnSpawn: 1
+  openingViewBackwardOffsetMeters: 5
 --- !u!4 &958355439
 Transform:
   m_ObjectHideFlags: 0
@@ -425,6 +446,7 @@ MonoBehaviour:
   victoryTextColor: {r: 0.92, g: 0.98, b: 0.96, a: 1}
   playAgainYesKey: 121
   playAgainNoKey: 110
+  openingSceneName: MainPlayScreenLoop
   logVictoryState: 1
 --- !u!1 &1112677417
 GameObject:

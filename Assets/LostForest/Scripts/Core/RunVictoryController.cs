@@ -21,6 +21,7 @@ namespace LostForest.Phase2.Core
         [SerializeField] private Color victoryTextColor = new Color(0.92f, 0.98f, 0.96f, 1f);
         [SerializeField] private KeyCode playAgainYesKey = KeyCode.Y;
         [SerializeField] private KeyCode playAgainNoKey = KeyCode.N;
+        [SerializeField] private string openingSceneName = "MainPlayScreenLoop";
 
         [Header("Debug")]
         [SerializeField] private bool logVictoryState = true;
@@ -42,6 +43,7 @@ namespace LostForest.Phase2.Core
         public int ReturnedRuneStoneCount => runeManager == null ? 0 : runeManager.DepositedRuneCount;
         public KeyCode PlayAgainYesKey => playAgainYesKey;
         public KeyCode PlayAgainNoKey => playAgainNoKey;
+        public string OpeningSceneName => openingSceneName;
 
         public void SetSources(
             RuneManager newRuneManager,
@@ -67,6 +69,7 @@ namespace LostForest.Phase2.Core
             victoryTextColor = new Color(0.92f, 0.98f, 0.96f, 1f);
             playAgainYesKey = KeyCode.Y;
             playAgainNoKey = KeyCode.N;
+            openingSceneName = "MainPlayScreenLoop";
         }
 
         public bool ValidateConfiguration(out string failureReason)
@@ -86,6 +89,12 @@ namespace LostForest.Phase2.Core
             if (playAgainYesKey == KeyCode.None || playAgainNoKey == KeyCode.None || playAgainYesKey == playAgainNoKey)
             {
                 failureReason = "Victory controller requires distinct Yes and No keys.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(openingSceneName))
+            {
+                failureReason = "Victory controller has no opening scene assigned for Play Again.";
                 return false;
             }
 
@@ -296,14 +305,14 @@ namespace LostForest.Phase2.Core
         private void PlayAgain()
         {
             ReleaseVictoryPause();
-            Scene activeScene = SceneManager.GetActiveScene();
 
-            if (Application.CanStreamedLevelBeLoaded(activeScene.name))
+            if (Application.CanStreamedLevelBeLoaded(openingSceneName))
             {
-                SceneManager.LoadScene(activeScene.name);
+                SceneManager.LoadScene(openingSceneName);
                 return;
             }
 
+            Debug.LogError($"Lost Forest victory screen cannot return to opening scene '{openingSceneName}'.", this);
             ResetVictoryState();
         }
 

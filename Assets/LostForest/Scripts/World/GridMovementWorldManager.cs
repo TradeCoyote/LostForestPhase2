@@ -24,6 +24,7 @@ namespace LostForest.Phase2.World
         [Header("Player Spawn")]
         [SerializeField] private float footClearanceMeters = 0.18f;
         [SerializeField] private bool faceTowardPositiveZOnSpawn = true;
+        [SerializeField] private float openingViewBackwardOffsetMeters = 5f;
 
         private bool trackerEventSubscribed;
 
@@ -34,6 +35,13 @@ namespace LostForest.Phase2.World
         public PlayerFieldTravelLog FieldTravelLog => playerFieldTravelLog;
         public RuneManager RuneManager => runeManager;
         public WorldEndFrostController WorldEndFrostController => worldEndFrostController;
+        public float OpeningViewBackwardOffsetMeters => Mathf.Max(0f, openingViewBackwardOffsetMeters);
+
+        public void ApplyOpeningViewDefaults()
+        {
+            faceTowardPositiveZOnSpawn = true;
+            openingViewBackwardOffsetMeters = 5f;
+        }
 
         public void SetPlayer(Transform newPlayer)
         {
@@ -329,9 +337,10 @@ namespace LostForest.Phase2.World
                 return;
             }
 
-            Vector3 groundPosition = HomeSlot.WorldCenter;
+            Vector3 openingViewPosition = HomeSlot.WorldCenter + Vector3.back * OpeningViewBackwardOffsetMeters;
+            Vector3 groundPosition = openingViewPosition;
 
-            if (activeRegionRenderer != null && activeRegionRenderer.TrySampleSlotSurface(HomeSlot, HomeSlot.WorldCenter, out TerrainSurfaceSample surfaceSample))
+            if (activeRegionRenderer != null && activeRegionRenderer.TrySampleSlotSurface(HomeSlot, openingViewPosition, out TerrainSurfaceSample surfaceSample))
             {
                 groundPosition = surfaceSample.Position;
             }
