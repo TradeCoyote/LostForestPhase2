@@ -32,11 +32,14 @@ namespace LostForest.Phase2.World
         [FormerlySerializedAs("drawFrostVignetteInGui")]
         [SerializeField] private bool drawFrostVignetteInScreenPass = true;
         [SerializeField] private float vignetteRecoverySecondsInsideField = 180f;
-        [SerializeField] private Color frostColor = new Color(0.68f, 0.90f, 1f, 1f);
+        [SerializeField] private Color frostColor = new Color(0.34f, 0.78f, 1f, 1f);
         [SerializeField, Range(0f, 1f)] private float minimumEdgeAlpha = 0.38f;
         [SerializeField, Range(0f, 1f)] private float minimumFillAlpha = 0.08f;
         [SerializeField, Range(0f, 1f)] private float maximumEdgeAlpha = 0.96f;
         [SerializeField, Range(0f, 1f)] private float maximumFillAlpha = 0.72f;
+        [SerializeField, Range(0f, 1f)] private float frostCrystalLineStrength = 0.34f;
+        [SerializeField, Range(0f, 1f)] private float frostCrystalFacetStrength = 0.18f;
+        [SerializeField, Range(0.001f, 0.05f)] private float frostCrystalLineWidth = 0.018f;
 
         [Header("Debug")]
         [SerializeField] private bool logFrostTransitions = true;
@@ -111,11 +114,14 @@ namespace LostForest.Phase2.World
             showFrostVignette = true;
             drawFrostVignetteInScreenPass = true;
             vignetteRecoverySecondsInsideField = 180f;
-            frostColor = new Color(0.68f, 0.90f, 1f, 1f);
+            frostColor = new Color(0.34f, 0.78f, 1f, 1f);
             minimumEdgeAlpha = 0.38f;
             minimumFillAlpha = 0.08f;
             maximumEdgeAlpha = 0.96f;
             maximumFillAlpha = 0.72f;
+            frostCrystalLineStrength = 0.34f;
+            frostCrystalFacetStrength = 0.18f;
+            frostCrystalLineWidth = 0.018f;
         }
 
         public bool TryClampPlanarVelocity(
@@ -212,6 +218,11 @@ namespace LostForest.Phase2.World
         private void Awake()
         {
             DiscoverReferencesIfNeeded();
+        }
+
+        private void OnValidate()
+        {
+            InvalidateVignetteTexture();
         }
 
         private void OnEnable()
@@ -630,18 +641,65 @@ namespace LostForest.Phase2.World
             };
 
             Color[] pixels = new Color[VignetteTextureSize * VignetteTextureSize];
+            Vector2[] shardStarts =
+            {
+                new Vector2(0.02f, 0.82f),
+                new Vector2(0.05f, 0.22f),
+                new Vector2(0.30f, 0.98f),
+                new Vector2(0.70f, 0.98f),
+                new Vector2(0.96f, 0.78f),
+                new Vector2(0.96f, 0.24f),
+                new Vector2(0.22f, 0.02f),
+                new Vector2(0.78f, 0.02f)
+            };
+            Vector2[] shardEnds =
+            {
+                new Vector2(0.36f, 0.61f),
+                new Vector2(0.34f, 0.39f),
+                new Vector2(0.42f, 0.68f),
+                new Vector2(0.58f, 0.68f),
+                new Vector2(0.63f, 0.59f),
+                new Vector2(0.66f, 0.40f),
+                new Vector2(0.40f, 0.32f),
+                new Vector2(0.60f, 0.32f)
+            };
             float center = (VignetteTextureSize - 1) * 0.5f;
             float maxDistance = Mathf.Sqrt(2f) * center;
+            float lineWidth = Mathf.Clamp(frostCrystalLineWidth, 0.001f, 0.05f);
 
             for (int y = 0; y < VignetteTextureSize; y++)
             {
                 for (int x = 0; x < VignetteTextureSize; x++)
                 {
+                    Vector2 uv = new Vector2(
+                        x / (float)(VignetteTextureSize - 1),
+                        y / (float)(VignetteTextureSize - 1));
                     float dx = x - center;
                     float dy = y - center;
                     float distance01 = Mathf.Sqrt((dx * dx) + (dy * dy)) / maxDistance;
-                    float alpha = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.34f, 0.98f, distance01));
-                    pixels[(y * VignetteTextureSize) + x] = new Color(1f, 1f, 1f, alpha);
+                    float edgeAlpha = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.34f, 0.98f, distance01));
+                    float crystalEdgeWeight = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.24f, 0.92f, distance01));
+                    float angle = Mathf.Atan2(dy, dx);
+                    float facet = Mathf.SmoothStep(
+                        0.72f,
+                        1f,
+                        Mathf.Abs(Mathf.Sin((angle * 5f) + (distance01 * 20f)))) * crystalEdgeWeight;
+                    float shardLine = 0f;
+
+                    for (int i = 0; i < shardStarts.Length; i++)
+                    {
+                        float distanceToLine = DistanceToSegment(uv, shardStarts[i], shardEnds[i]);
+                        shardLine = Mathf.Max(
+                            shardLine,
+                            1f - Mathf.SmoothStep(lineWidth * 0.35f, lineWidth, distanceToLine));
+                    }
+
+                    float crystalAlpha =
+                        (shardLine * crystalEdgeWeight * frostCrystalLineStrength) +
+                        (facet * frostCrystalFacetStrength);
+                    float alpha = Mathf.Clamp01(edgeAlpha + crystalAlpha);
+                    float highlight = Mathf.Clamp01(0.82f + (shardLine * 0.18f) + (facet * 0.08f));
+                    pixels[(y * VignetteTextureSize) + x] = new Color(highlight, highlight, 1f, alpha);
                 }
             }
 
@@ -773,6 +831,36 @@ namespace LostForest.Phase2.World
         private static Color WithAlpha(Color color, float alpha)
         {
             return new Color(color.r, color.g, color.b, Mathf.Clamp01(alpha));
+        }
+
+        private void InvalidateVignetteTexture()
+        {
+            if (vignetteTexture == null)
+            {
+                return;
+            }
+
+            DestroyUnityObject(vignetteTexture);
+            vignetteTexture = null;
+
+            if (vignetteMaterial != null)
+            {
+                vignetteMaterial.mainTexture = null;
+            }
+        }
+
+        private static float DistanceToSegment(Vector2 point, Vector2 start, Vector2 end)
+        {
+            Vector2 segment = end - start;
+            float lengthSquared = segment.sqrMagnitude;
+
+            if (lengthSquared <= 0.000001f)
+            {
+                return Vector2.Distance(point, start);
+            }
+
+            float t = Mathf.Clamp01(Vector2.Dot(point - start, segment) / lengthSquared);
+            return Vector2.Distance(point, start + (segment * t));
         }
 
         private static Shader FindOverlayShader()

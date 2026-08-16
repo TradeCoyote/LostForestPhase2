@@ -26,23 +26,27 @@ namespace LostForest.Phase2.Feedback
 
         [Header("Rare Whiteout")]
         [SerializeField] private Vector2 whiteoutIntervalRangeSeconds = new Vector2(360f, 720f);
-        [SerializeField] private Vector2 whiteoutHoldRangeSeconds = new Vector2(30f, 60f);
+        [SerializeField] private Vector2 whiteoutHoldRangeSeconds = new Vector2(15f, 30f);
         [SerializeField] private float whiteoutFadeInSeconds = 15f;
-        [SerializeField] private float whiteoutFadeOutSeconds = 12f;
+        [SerializeField] private float whiteoutFadeOutSeconds = 15f;
         [SerializeField] private float whiteoutFogStartDistanceMeters;
         [SerializeField] private float whiteoutFogEndDistanceMeters = 0.65f;
         [SerializeField] private Color whiteoutFogColor = new Color(0.985f, 0.995f, 1f, 1f);
         [SerializeField] private int randomSeed = 20260812;
 
         [Header("Whiteout Wavering Views")]
-        [SerializeField] private Vector2Int whiteoutGlimpseCountRange = new Vector2Int(1, 2);
-        [SerializeField] private Vector2 whiteoutGlimpseDurationRangeSeconds = new Vector2(5f, 7f);
-        [SerializeField, Range(0f, 0.25f)] private float whiteoutGlimpseVisibilityFraction = 0.1f;
+        [SerializeField] private Vector2Int whiteoutGlimpseCountRange = new Vector2Int(2, 3);
+        [SerializeField] private Vector2 whiteoutGlimpseDurationRangeSeconds = new Vector2(2f, 4f);
+        [SerializeField, Range(0f, 0.35f)] private float whiteoutGlimpseVisibilityFraction = 0.2f;
         [SerializeField, Range(0f, 0.1f)] private float whiteoutGlimpseTimingJitter = 0.04f;
 
         [Header("Camera Backdrop")]
         [SerializeField] private bool tintMainCameraBackground = true;
         [SerializeField] private bool forceSolidFogBackground = true;
+
+        [Header("External Visibility Pressure")]
+        [SerializeField, Range(0f, 1f)] private float externalVisibilityPressure;
+        [SerializeField] private float minimumFogEndDistanceUnderPressureMeters = 24f;
 
         [Header("Development Debug Commands")]
         [SerializeField] private bool enableDevelopmentHotkeys = true;
@@ -59,8 +63,10 @@ namespace LostForest.Phase2.Feedback
         private float whiteoutHoldTotalSeconds;
         private float firstGlimpseCenterSeconds;
         private float secondGlimpseCenterSeconds;
+        private float thirdGlimpseCenterSeconds;
         private float firstGlimpseDurationSeconds;
         private float secondGlimpseDurationSeconds;
+        private float thirdGlimpseDurationSeconds;
         private int whiteoutGlimpseCount;
         private float transitionSecondsElapsed;
         private bool initialized;
@@ -79,6 +85,17 @@ namespace LostForest.Phase2.Feedback
         public int WhiteoutGlimpseCount => whiteoutGlimpseCount;
         public float WhiteoutGlimpseVisibilityFraction => whiteoutGlimpseVisibilityFraction;
         public float CurrentWhiteoutGlimpseVisibility => state == FogCycleState.Whiteout ? 1f - currentWhiteoutIntensity : 0f;
+        public float ExternalVisibilityPressure => externalVisibilityPressure;
+
+        /// <summary>
+        /// Lets an unseen threat tighten visibility without taking ownership of
+        /// the normal weather or whiteout cycle.
+        /// </summary>
+        public void SetExternalVisibilityPressure(float pressureNormalized)
+        {
+            externalVisibilityPressure = Mathf.Clamp01(pressureNormalized);
+            ApplyCurrentFogSettings();
+        }
 
         public void ApplyEarlyFogDefaults()
         {
@@ -91,19 +108,21 @@ namespace LostForest.Phase2.Feedback
             normalFogWaverSpeedMetersPerSecond = 0.35f;
             exponentialDensity = 0.02f;
             whiteoutIntervalRangeSeconds = new Vector2(360f, 720f);
-            whiteoutHoldRangeSeconds = new Vector2(30f, 60f);
+            whiteoutHoldRangeSeconds = new Vector2(15f, 30f);
             whiteoutFadeInSeconds = 15f;
-            whiteoutFadeOutSeconds = 12f;
+            whiteoutFadeOutSeconds = 15f;
             whiteoutFogStartDistanceMeters = 0f;
             whiteoutFogEndDistanceMeters = 0.65f;
             whiteoutFogColor = new Color(0.985f, 0.995f, 1f, 1f);
             randomSeed = 20260812;
-            whiteoutGlimpseCountRange = new Vector2Int(1, 2);
-            whiteoutGlimpseDurationRangeSeconds = new Vector2(5f, 7f);
-            whiteoutGlimpseVisibilityFraction = 0.1f;
+            whiteoutGlimpseCountRange = new Vector2Int(2, 3);
+            whiteoutGlimpseDurationRangeSeconds = new Vector2(2f, 4f);
+            whiteoutGlimpseVisibilityFraction = 0.2f;
             whiteoutGlimpseTimingJitter = 0.04f;
             tintMainCameraBackground = true;
             forceSolidFogBackground = true;
+            externalVisibilityPressure = 0f;
+            minimumFogEndDistanceUnderPressureMeters = 24f;
             initialized = false;
         }
 
@@ -167,9 +186,9 @@ namespace LostForest.Phase2.Feedback
                 return false;
             }
 
-            if (!IsOrderedRange(whiteoutHoldRangeSeconds, 30f, 60f))
+            if (!IsOrderedRange(whiteoutHoldRangeSeconds, 15f, 30f))
             {
-                failureReason = $"Whiteout hold must stay inside 30-60 seconds, got {whiteoutHoldRangeSeconds.x:0.0}-{whiteoutHoldRangeSeconds.y:0.0}.";
+                failureReason = $"Whiteout hold must stay inside 15-30 seconds, got {whiteoutHoldRangeSeconds.x:0.0}-{whiteoutHoldRangeSeconds.y:0.0}.";
                 return false;
             }
 
@@ -185,27 +204,33 @@ namespace LostForest.Phase2.Feedback
                 return false;
             }
 
+            if (Mathf.Abs(whiteoutFadeOutSeconds - 15f) > 0.001f)
+            {
+                failureReason = $"Whiteout clearing must take 15 seconds, got {whiteoutFadeOutSeconds:0.0}.";
+                return false;
+            }
+
             if (whiteoutFogEndDistanceMeters > 1f || whiteoutFogEndDistanceMeters <= whiteoutFogStartDistanceMeters)
             {
                 failureReason = $"Whiteout visibility must end within one meter, got {whiteoutFogStartDistanceMeters:0.00}-{whiteoutFogEndDistanceMeters:0.00}.";
                 return false;
             }
 
-            if (whiteoutGlimpseCountRange.x != 1 || whiteoutGlimpseCountRange.y != 2)
+            if (whiteoutGlimpseCountRange.x != 2 || whiteoutGlimpseCountRange.y != 3)
             {
-                failureReason = $"Whiteouts must contain one or two wavering views, got {whiteoutGlimpseCountRange.x}-{whiteoutGlimpseCountRange.y}.";
+                failureReason = $"Whiteouts must contain two or three wavering views, got {whiteoutGlimpseCountRange.x}-{whiteoutGlimpseCountRange.y}.";
                 return false;
             }
 
-            if (!IsOrderedRange(whiteoutGlimpseDurationRangeSeconds, 4f, 8f))
+            if (!IsOrderedRange(whiteoutGlimpseDurationRangeSeconds, 2f, 4f))
             {
-                failureReason = $"Whiteout wavering views must last 4-8 seconds, got {whiteoutGlimpseDurationRangeSeconds.x:0.0}-{whiteoutGlimpseDurationRangeSeconds.y:0.0}.";
+                failureReason = $"Whiteout wavering views must last 2-4 seconds, got {whiteoutGlimpseDurationRangeSeconds.x:0.0}-{whiteoutGlimpseDurationRangeSeconds.y:0.0}.";
                 return false;
             }
 
-            if (whiteoutGlimpseVisibilityFraction < 0.08f || whiteoutGlimpseVisibilityFraction > 0.12f)
+            if (whiteoutGlimpseVisibilityFraction < 0.18f || whiteoutGlimpseVisibilityFraction > 0.22f)
             {
-                failureReason = $"Whiteout wavering views must restore about 10% visibility, got {whiteoutGlimpseVisibilityFraction * 100f:0.0}%.";
+                failureReason = $"Whiteout wavering views must restore about 20% visibility, got {whiteoutGlimpseVisibilityFraction * 100f:0.0}%.";
                 return false;
             }
 
@@ -238,16 +263,18 @@ namespace LostForest.Phase2.Feedback
         {
             normalFogEndDistanceRangeMeters = SortRange(normalFogEndDistanceRangeMeters, new Vector2(50f, 70f));
             whiteoutIntervalRangeSeconds = SortRange(whiteoutIntervalRangeSeconds, new Vector2(360f, 720f));
-            whiteoutHoldRangeSeconds = SortRange(whiteoutHoldRangeSeconds, new Vector2(30f, 60f));
+            whiteoutHoldRangeSeconds = SortRange(whiteoutHoldRangeSeconds, new Vector2(15f, 30f));
             normalFogWaverSpeedMetersPerSecond = Mathf.Max(0.01f, normalFogWaverSpeedMetersPerSecond);
             whiteoutFadeInSeconds = Mathf.Max(0.01f, whiteoutFadeInSeconds);
             whiteoutFadeOutSeconds = Mathf.Max(0.01f, whiteoutFadeOutSeconds);
             whiteoutFogStartDistanceMeters = Mathf.Max(0f, whiteoutFogStartDistanceMeters);
             whiteoutFogEndDistanceMeters = Mathf.Max(whiteoutFogStartDistanceMeters + 0.05f, whiteoutFogEndDistanceMeters);
-            whiteoutGlimpseCountRange.x = Mathf.Clamp(whiteoutGlimpseCountRange.x, 1, 2);
-            whiteoutGlimpseCountRange.y = Mathf.Clamp(whiteoutGlimpseCountRange.y, whiteoutGlimpseCountRange.x, 2);
-            whiteoutGlimpseDurationRangeSeconds = SortRange(whiteoutGlimpseDurationRangeSeconds, new Vector2(5f, 7f));
-            whiteoutGlimpseVisibilityFraction = Mathf.Clamp(whiteoutGlimpseVisibilityFraction, 0.08f, 0.12f);
+            whiteoutGlimpseCountRange.x = Mathf.Clamp(whiteoutGlimpseCountRange.x, 2, 3);
+            whiteoutGlimpseCountRange.y = Mathf.Clamp(whiteoutGlimpseCountRange.y, whiteoutGlimpseCountRange.x, 3);
+            whiteoutGlimpseDurationRangeSeconds = SortRange(whiteoutGlimpseDurationRangeSeconds, new Vector2(2f, 4f));
+            whiteoutGlimpseVisibilityFraction = Mathf.Clamp(whiteoutGlimpseVisibilityFraction, 0.18f, 0.22f);
+            externalVisibilityPressure = Mathf.Clamp01(externalVisibilityPressure);
+            minimumFogEndDistanceUnderPressureMeters = Mathf.Max(fogStartDistanceMeters + 0.05f, minimumFogEndDistanceUnderPressureMeters);
         }
 
         private void Update()
@@ -356,19 +383,22 @@ namespace LostForest.Phase2.Feedback
             whiteoutGlimpseCount = random.Next(whiteoutGlimpseCountRange.x, whiteoutGlimpseCountRange.y + 1);
 
             firstGlimpseDurationSeconds = RollRange(whiteoutGlimpseDurationRangeSeconds);
-            secondGlimpseDurationSeconds = whiteoutGlimpseCount > 1
+            secondGlimpseDurationSeconds = RollRange(whiteoutGlimpseDurationRangeSeconds);
+            thirdGlimpseDurationSeconds = whiteoutGlimpseCount > 2
                 ? RollRange(whiteoutGlimpseDurationRangeSeconds)
                 : 0f;
 
-            if (whiteoutGlimpseCount == 1)
+            if (whiteoutGlimpseCount == 2)
             {
-                firstGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.5f + RollSignedTimingJitter());
-                secondGlimpseCenterSeconds = 0f;
+                firstGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.33f + RollSignedTimingJitter());
+                secondGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.67f + RollSignedTimingJitter());
+                thirdGlimpseCenterSeconds = 0f;
                 return;
             }
 
-            firstGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.33f + RollSignedTimingJitter());
-            secondGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.67f + RollSignedTimingJitter());
+            firstGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.25f + RollSignedTimingJitter());
+            secondGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.5f + RollSignedTimingJitter());
+            thirdGlimpseCenterSeconds = whiteoutHoldTotalSeconds * (0.75f + RollSignedTimingJitter());
         }
 
         private void UpdateWhiteoutGlimpses()
@@ -383,6 +413,13 @@ namespace LostForest.Phase2.Feedback
                     EvaluateGlimpseEnvelope(elapsedSeconds, secondGlimpseCenterSeconds, secondGlimpseDurationSeconds));
             }
 
+            if (whiteoutGlimpseCount > 2)
+            {
+                glimpseEnvelope = Mathf.Max(
+                    glimpseEnvelope,
+                    EvaluateGlimpseEnvelope(elapsedSeconds, thirdGlimpseCenterSeconds, thirdGlimpseDurationSeconds));
+            }
+
             currentWhiteoutIntensity = 1f - whiteoutGlimpseVisibilityFraction * glimpseEnvelope;
         }
 
@@ -391,8 +428,10 @@ namespace LostForest.Phase2.Feedback
             whiteoutHoldTotalSeconds = 0f;
             firstGlimpseCenterSeconds = 0f;
             secondGlimpseCenterSeconds = 0f;
+            thirdGlimpseCenterSeconds = 0f;
             firstGlimpseDurationSeconds = 0f;
             secondGlimpseDurationSeconds = 0f;
+            thirdGlimpseDurationSeconds = 0f;
             whiteoutGlimpseCount = 0;
         }
 
@@ -435,6 +474,12 @@ namespace LostForest.Phase2.Feedback
             float intensity = Mathf.Clamp01(currentWhiteoutIntensity);
             float startDistance = Mathf.Lerp(fogStartDistanceMeters, whiteoutFogStartDistanceMeters, intensity);
             float endDistance = Mathf.Lerp(currentNormalFogEndDistanceMeters, whiteoutFogEndDistanceMeters, intensity);
+
+            if (intensity <= 0.001f && externalVisibilityPressure > 0f)
+            {
+                float pressuredEndDistance = Mathf.Lerp(currentNormalFogEndDistanceMeters, minimumFogEndDistanceUnderPressureMeters, externalVisibilityPressure);
+                endDistance = Mathf.Min(endDistance, pressuredEndDistance);
+            }
             Color currentFogColor = Color.Lerp(fogColor, whiteoutFogColor, intensity);
 
             RenderSettings.fog = fogEnabled;

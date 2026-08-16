@@ -158,19 +158,21 @@ MonoBehaviour:
   normalFogWaverSpeedMetersPerSecond: 0.35
   exponentialDensity: 0.02
   whiteoutIntervalRangeSeconds: {x: 360, y: 720}
-  whiteoutHoldRangeSeconds: {x: 30, y: 60}
+  whiteoutHoldRangeSeconds: {x: 15, y: 30}
   whiteoutFadeInSeconds: 15
-  whiteoutFadeOutSeconds: 12
+  whiteoutFadeOutSeconds: 15
   whiteoutFogStartDistanceMeters: 0
   whiteoutFogEndDistanceMeters: 0.65
   whiteoutFogColor: {r: 0.985, g: 0.995, b: 1, a: 1}
   randomSeed: 20260812
-  whiteoutGlimpseCountRange: {x: 1, y: 2}
-  whiteoutGlimpseDurationRangeSeconds: {x: 5, y: 7}
-  whiteoutGlimpseVisibilityFraction: 0.1
+  whiteoutGlimpseCountRange: {x: 2, y: 3}
+  whiteoutGlimpseDurationRangeSeconds: {x: 2, y: 4}
+  whiteoutGlimpseVisibilityFraction: 0.2
   whiteoutGlimpseTimingJitter: 0.04
   tintMainCameraBackground: 1
   forceSolidFogBackground: 1
+  externalVisibilityPressure: 0
+  minimumFogEndDistanceUnderPressureMeters: 24
   enableDevelopmentHotkeys: 1
   forceWhiteoutKey: 286
   forceClearKey: 287
@@ -205,6 +207,10 @@ GameObject:
   - component: {fileID: 958355441}
   - component: {fileID: 958355442}
   - component: {fileID: 958355443}
+  - component: {fileID: 958355444}
+  - component: {fileID: 958355446}
+  - component: {fileID: 958355445}
+  - component: {fileID: 958355447}
   m_Layer: 0
   m_Name: Grid Movement World
   m_TagString: Untagged
@@ -231,6 +237,7 @@ MonoBehaviour:
   worldEndFrostController: {fileID: 958355442}
   lightingDirector: {fileID: 1960020248}
   runeManager: {fileID: 958355441}
+  theHunter: {fileID: 958355444}
   targetCamera: {fileID: 1803468284}
   showHud: 1
   toggleHudKey: 116
@@ -242,6 +249,9 @@ MonoBehaviour:
   textInsetViewport: 0.025
   textColor: {r: 1, g: 0, b: 0.75, a: 1}
   backingColor: {r: 0.92, g: 0.97, b: 1, a: 0}
+  neededRuneObjectiveColor: {r: 1, g: 0.48, b: 0.06, a: 1}
+  depositedRuneObjectiveFillColor: {r: 1, g: 1, b: 1, a: 1}
+  depositedRuneObjectiveOutlineColor: {r: 0.08, g: 0.36, b: 1, a: 1}
 --- !u!114 &958355437
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -325,6 +335,7 @@ MonoBehaviour:
   gridDebugHud: {fileID: 958355436}
   runeManager: {fileID: 958355441}
   worldEndFrostController: {fileID: 958355442}
+  theHunter: {fileID: 958355444}
   footClearanceMeters: 0.18
   faceTowardPositiveZOnSpawn: 1
   openingViewBackwardOffsetMeters: 5
@@ -340,7 +351,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1912225974}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &958355440
@@ -371,7 +383,9 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::LostForest.Phase2.Runes.RuneManager
   runSeedSalt: 7317
-  preferredMinRequiredSlotDistanceFromHome: 2
+  firstRequiredRuneMinSlotDistanceFromHome: 1
+  secondRequiredRuneMinSlotDistanceFromHome: 2
+  thirdRequiredRuneMinSlotDistanceFromHome: 3
   logStateChanges: 1
   player: {fileID: 2063129116}
   playerCamera: {fileID: 1803468284}
@@ -386,7 +400,7 @@ MonoBehaviour:
   homeSocketVisibleDistanceMeters: 30
   homeSocketLetterReadableDistanceMeters: 12
   forestDiscColor: {r: 0.08, g: 0.11, b: 0.12, a: 1}
-  forestLetterColor: {r: 1, g: 0.94, b: 0.08, a: 1}
+  forestLetterColor: {r: 1, g: 0.48, b: 0.06, a: 1}
   emptySocketColor: {r: 0.46, g: 0.46, b: 0.46, a: 1}
   depositedSocketColor: {r: 1, g: 0.02, b: 0.02, a: 1}
   homeNeededLetterColor: {r: 1, g: 0.02, b: 0.02, a: 1}
@@ -416,11 +430,14 @@ MonoBehaviour:
   showFrostVignette: 1
   drawFrostVignetteInScreenPass: 1
   vignetteRecoverySecondsInsideField: 180
-  frostColor: {r: 0.68, g: 0.9, b: 1, a: 1}
+  frostColor: {r: 0.34, g: 0.78, b: 1, a: 1}
   minimumEdgeAlpha: 0.38
   minimumFillAlpha: 0.08
   maximumEdgeAlpha: 0.96
   maximumFillAlpha: 0.72
+  frostCrystalLineStrength: 0.34
+  frostCrystalFacetStrength: 0.18
+  frostCrystalLineWidth: 0.018
   logFrostTransitions: 1
   logFrostBarrierClamps: 1
 --- !u!114 &958355443
@@ -448,6 +465,210 @@ MonoBehaviour:
   playAgainNoKey: 110
   openingSceneName: MainPlayScreenLoop
   logVictoryState: 1
+--- !u!114 &958355444
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958355435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9c585200fa81485e9f04869f579d9de, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LostForest.Phase2.Pursuer.TheHunterPursuerController
+  archetype: 0
+  playerGridAddressTracker: {fileID: 2063129113}
+  playerFieldTravelLog: {fileID: 958355440}
+  firstPersonController: {fileID: 2063129114}
+  playerCondition: {fileID: 2063129117}
+  runeManager: {fileID: 958355441}
+  runVictoryController: {fileID: 958355443}
+  fogDirector: {fileID: 646401644}
+  dormantDurationSeconds: 18
+  passiveInterestPerSecond: 0.5
+  distanceFromHomeInterestPerSecond: 0.16
+  distanceFromHomeInterestThreshold: 2
+  carriedRuneInterestPerSecond: 1.1
+  runePickupInterest: 28
+  runeDepositInterest: 14
+  searchAlertThreshold: 12
+  stalkAlertThreshold: 42
+  closePressureDistanceSlots: 5
+  noRunesReturnedMoveIntervalSeconds: 26
+  oneRuneReturnedMoveIntervalSeconds: 20
+  twoRunesReturnedMoveIntervalSeconds: 15
+  searchTrailRefreshEverySlotEntries: 2
+  sprintLostTrailChance: 0.6
+  retreatGraceSeconds: 7
+  stalkFogPressure: 0.3
+  closeFogPressure: 0.72
+  logStateChanges: 1
+  logHunterMoves: 1
+  enableDevelopmentHotkeys: 1
+  cycleForceStateKey: 288
+  forceCatchKey: 289
+--- !u!114 &958355445
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958355435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec25c81bc92aa465da3901fa5fdd95ef, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::LostForest.Phase2.Pursuer.TheHunterDrumCueDirector
+  theHunter: {fileID: 958355444}
+  playerCondition: {fileID: 2063129117}
+  runVictoryController: {fileID: 958355443}
+  drumAudioSource: {fileID: 958355446}
+  huntDrumAudioSource: {fileID: 1912225973}
+  drumLowPassFilter: {fileID: 958355447}
+  firstAlarmDrumClip: {fileID: 8300000, guid: 68b6184a073bb43688b7b4a421e01569, type: 3}
+  loudTribalDrumClip: {fileID: 0}
+  distantHuntDrumsClip: {fileID: 8300000, guid: c739fe323601b4a19a33dceea34ae148, type: 3}
+  synthesizePrototypeDrumsWhenClipsAreMissing: 1
+  loudDrumVolume: 1
+  loudAlarmGain: 2.1
+  twoHexHuntVolume: 0.38
+  adjacentHuntVolume: 0.72
+  doubleHitSpacingSeconds: 0.62
+  adjacentLoudHitSpacingSeconds: 1.5
+  twoHexHuntIntervalSeconds: {x: 5, y: 8}
+  twoHexHuntFadeInSeconds: {x: 0.85, y: 1.45}
+  twoHexHuntHoldSeconds: {x: 1, y: 2}
+  twoHexHuntFadeOutSeconds: {x: 1.1, y: 1.9}
+  adjacentHuntFadeHalfCycleSeconds: {x: 1.35, y: 2.45}
+  deepDrumLowPassCutoffHz: 360
+  huntCueSpatialDistanceMeters: 12
+  adjacentHuntRepositionIntervalSeconds: {x: 2.5, y: 5}
+  adjacentHuntOrbitMaxDegrees: 135
+  adjacentHuntOrbitTurnDegreesPerSecond: 120
+  logProximityChanges: 0
+--- !u!82 &958355446
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958355435}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!169 &958355447
+AudioLowPassFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958355435}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_LowpassResonanceQ: 1
+  lowpassLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0.015916325
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1 &1112677417
 GameObject:
   m_ObjectHideFlags: 0
@@ -637,6 +858,135 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
+--- !u!1 &1912225972
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1912225974}
+  - component: {fileID: 1912225973}
+  m_Layer: 0
+  m_Name: TheHunter Hunt Drum Spatial Audio
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!82 &1912225973
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1912225972}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 0
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 0
+  MinDistance: 1
+  MaxDistance: 36
+  Pan2D: 0
+  rolloffMode: 1
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!4 &1912225974
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1912225972}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 958355439}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1960020246
 GameObject:
   m_ObjectHideFlags: 0
@@ -763,7 +1113,7 @@ MonoBehaviour:
   worldEndFrostController: {fileID: 958355442}
   gravityMetersPerSecondSquared: -24
   groundedDownwardVelocity: -2
-  logSprintTransitions: 1
+  logSprintTransitions: 0
 --- !u!143 &2063129115
 CharacterController:
   m_ObjectHideFlags: 0

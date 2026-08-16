@@ -57,6 +57,8 @@ namespace LostForest.Phase2.Player
         private Material gameOverOverlayMaterial;
         private TextMesh gameOverTitleText;
         private TextMesh gameOverSubtitleText;
+        private string gameOverTitle = "Game Over";
+        private string gameOverSubtitle;
 
         public float BaseMaxStamina => Mathf.Max(1f, maxStamina);
         public float MaxStamina => BaseMaxStamina;
@@ -94,7 +96,38 @@ namespace LostForest.Phase2.Player
             lastLoggedChillBand = -1;
             gameOverTriggered = false;
             gameOverElapsedSeconds = 0f;
+            gameOverTitle = "Game Over";
+            gameOverSubtitle = null;
             DestroyPrototypeGameOverOverlay();
+        }
+
+        /// <summary>
+        /// Ends the run from a non-condition threat while preserving the shared
+        /// restart flow. Chill still uses the same method with its own message.
+        /// </summary>
+        public bool TriggerGameOver(string title, string subtitle)
+        {
+            if (gameOverTriggered)
+            {
+                return false;
+            }
+
+            gameOverTriggered = true;
+            gameOverElapsedSeconds = 0f;
+            gameOverTitle = string.IsNullOrWhiteSpace(title) ? "Game Over" : title;
+            gameOverSubtitle = string.IsNullOrWhiteSpace(subtitle)
+                ? $"Press {playAgainKey} to Play Again."
+                : subtitle;
+
+            if (Application.isPlaying)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+                EnsurePrototypeGameOverOverlay();
+                UpdatePrototypeGameOverOverlay();
+            }
+
+            return true;
         }
 
         public void ApplyPhase2PrototypeEconomyDefaults()
@@ -278,16 +311,7 @@ namespace LostForest.Phase2.Player
                 return;
             }
 
-            gameOverTriggered = true;
-            gameOverElapsedSeconds = 0f;
-
-            if (Application.isPlaying)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                EnsurePrototypeGameOverOverlay();
-                UpdatePrototypeGameOverOverlay();
-            }
+            TriggerGameOver("Game Over", $"The cold has taken hold.\nPress {playAgainKey} to Play Again.");
         }
 
         private void PlayAgain()
@@ -366,8 +390,8 @@ namespace LostForest.Phase2.Player
             };
             gameOverOverlayRenderer.material = gameOverOverlayMaterial;
 
-            gameOverTitleText = CreatePrototypeGameOverText("Prototype Game Over Title", "Game Over", 96, 1001);
-            gameOverSubtitleText = CreatePrototypeGameOverText("Prototype Game Over Subtitle", $"The cold has taken hold.\nPress {playAgainKey} to Play Again.", 42, 1001);
+            gameOverTitleText = CreatePrototypeGameOverText("Prototype Game Over Title", gameOverTitle, 96, 1001);
+            gameOverSubtitleText = CreatePrototypeGameOverText("Prototype Game Over Subtitle", ResolveGameOverSubtitle(), 42, 1001);
             UpdatePrototypeGameOverOverlayGeometry(targetCamera);
         }
 
@@ -433,11 +457,13 @@ namespace LostForest.Phase2.Player
 
             if (gameOverTitleText != null)
             {
+                gameOverTitleText.text = gameOverTitle;
                 gameOverTitleText.color = textColor;
             }
 
             if (gameOverSubtitleText != null)
             {
+                gameOverSubtitleText.text = ResolveGameOverSubtitle();
                 gameOverSubtitleText.color = textColor;
             }
         }
@@ -504,6 +530,13 @@ namespace LostForest.Phase2.Player
             gameOverOverlayMaterial = null;
             gameOverTitleText = null;
             gameOverSubtitleText = null;
+        }
+
+        private string ResolveGameOverSubtitle()
+        {
+            return string.IsNullOrWhiteSpace(gameOverSubtitle)
+                ? $"The cold has taken hold.\nPress {playAgainKey} to Play Again."
+                : gameOverSubtitle;
         }
 
         private static Shader FindPrototypeOverlayShader()

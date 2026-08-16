@@ -26,7 +26,7 @@ namespace LostForest.Phase2.Player
         [SerializeField] private float groundedDownwardVelocity = -2f;
 
         [Header("Debug")]
-        [SerializeField] private bool logSprintTransitions = true;
+        [SerializeField] private bool logSprintTransitions;
 
         private CharacterController characterController;
         private float pitchDegrees;
@@ -143,7 +143,7 @@ namespace LostForest.Phase2.Player
 
             Vector2 input = ReadWasdInput();
             input = Vector2.ClampMagnitude(input, 1f);
-            bool isFrozen = playerCondition != null && playerCondition.IsFrozen;
+            bool isFrozen = playerCondition != null && (playerCondition.IsFrozen || playerCondition.IsGameOver);
 
             if (isFrozen)
             {

@@ -10,10 +10,13 @@ namespace LostForest.Phase2.Runes
     {
         private const int RequiredRuneTargetCount = 3;
         private const int AlphabetRuneCount = 26;
+        private static readonly Color PrototypeRuneOrange = new Color(1f, 0.48f, 0.06f, 1f);
 
         [Header("Run Setup")]
         [SerializeField] private int runSeedSalt = 7317;
-        [SerializeField, Range(1, 8)] private int preferredMinRequiredSlotDistanceFromHome = 2;
+        [SerializeField, Range(1, 8)] private int firstRequiredRuneMinSlotDistanceFromHome = 1;
+        [SerializeField, Range(1, 8)] private int secondRequiredRuneMinSlotDistanceFromHome = 2;
+        [SerializeField, Range(1, 8)] private int thirdRequiredRuneMinSlotDistanceFromHome = 3;
         [SerializeField] private bool logStateChanges = true;
 
         [Header("Scene References")]
@@ -36,7 +39,7 @@ namespace LostForest.Phase2.Runes
 
         [Header("Prototype Colors")]
         [SerializeField] private Color forestDiscColor = new Color(0.08f, 0.11f, 0.12f, 1f);
-        [SerializeField] private Color forestLetterColor = new Color(1f, 0.94f, 0.08f, 1f);
+        [SerializeField] private Color forestLetterColor = new Color(1f, 0.48f, 0.06f, 1f);
         [SerializeField] private Color emptySocketColor = new Color(0.46f, 0.46f, 0.46f, 1f);
         [SerializeField] private Color depositedSocketColor = new Color(1f, 0.02f, 0.02f, 1f);
         [SerializeField] private Color homeNeededLetterColor = new Color(1f, 0.02f, 0.02f, 1f);
@@ -58,6 +61,7 @@ namespace LostForest.Phase2.Runes
         private string carriedMarkerKey;
         private int runSeed;
 
+        public event Action<char, string> RunePickedUp;
         public event Action<char, int, int> RuneDeposited;
         public event Action RunCompleted;
 
@@ -108,6 +112,16 @@ namespace LostForest.Phase2.Runes
         public Color ForestLetterColor => forestLetterColor;
         public Color HomeNeededLetterColor => homeNeededLetterColor;
         public Camera PlayerCamera => playerCamera == null ? Camera.main : playerCamera;
+
+        private void Awake()
+        {
+            ApplyPrototypeRuneColorDefaults();
+        }
+
+        public void ApplyPrototypeRuneColorDefaults()
+        {
+            forestLetterColor = PrototypeRuneOrange;
+        }
 
         public bool IsMarkerVisible(Vector3 worldPosition)
         {
@@ -199,6 +213,21 @@ namespace LostForest.Phase2.Runes
 
             FieldSlotData slot = fieldData.GetSlot(slotAddress);
             return slot == null ? -1 : HexFrameMath.GetHexDistance(homeSlot.AxialCoordinate, slot.AxialCoordinate);
+        }
+
+        /// <summary>
+        /// Returns the Home-ring floor for each required-rune position in this run.
+        /// The first may be one ring away, the second may be two rings away, and
+        /// the third must be three or more rings away. None of those rings are
+        /// guaranteed to contain a rune; they only prevent an easy opening run.
+        /// </summary>
+        public int GetRequiredRuneMinimumSlotDistanceFromHome(int requiredRuneIndex)
+        {
+            return requiredRuneIndex <= 0
+                ? Mathf.Max(1, firstRequiredRuneMinSlotDistanceFromHome)
+                : requiredRuneIndex == 1
+                    ? Mathf.Max(2, secondRequiredRuneMinSlotDistanceFromHome)
+                    : Mathf.Max(3, thirdRequiredRuneMinSlotDistanceFromHome);
         }
 
         public bool IsMarkerClaimed(string markerKey)
@@ -370,6 +399,8 @@ namespace LostForest.Phase2.Runes
             {
                 Debug.Log($"Lost Forest Rune Pickup: Rune={carriedRune}, Slot={marker.FieldSlotAddress}, Carried={CarriedRuneDebugText}, Deposited={DepositedRunesDebugText}, ActiveMarkers={ActiveMarkerCount}", this);
             }
+
+            RunePickedUp?.Invoke(carriedRune, marker.FieldSlotAddress);
 
             return true;
         }
@@ -558,28 +589,28 @@ namespace LostForest.Phase2.Runes
 
         private void AssignGuaranteedRequiredSlots(System.Random random)
         {
-            List<FieldSlotData> candidates = CollectRequiredSlotCandidates(preferredMinRequiredSlotDistanceFromHome);
-
-            if (candidates.Count < neededRunes.Count)
-            {
-                candidates = CollectRequiredSlotCandidates(1);
-            }
-
-            if (candidates.Count == 0)
-            {
-                Debug.LogWarning("Lost Forest Rune Run could not assign guaranteed required rune slots because no non-Home slots exist.", this);
-                return;
-            }
-
-            Shuffle(candidates, random);
+            HashSet<string> assignedSlotAddresses = new HashSet<string>();
 
             for (int i = 0; i < neededRunes.Count; i++)
             {
-                requiredSlotAddressByRune[neededRunes[i]] = candidates[i % candidates.Count].Address;
+                int minimumDistance = GetRequiredRuneMinimumSlotDistanceFromHome(i);
+                List<FieldSlotData> candidates = CollectRequiredSlotCandidates(minimumDistance, assignedSlotAddresses);
+
+                if (candidates.Count == 0)
+                {
+                    Debug.LogWarning(
+                        $"Lost Forest Rune Run could not assign required rune {neededRunes[i]} at least {minimumDistance} rings from Home.",
+                        this);
+                    continue;
+                }
+
+                FieldSlotData selectedSlot = candidates[random.Next(0, candidates.Count)];
+                requiredSlotAddressByRune[neededRunes[i]] = selectedSlot.Address;
+                assignedSlotAddresses.Add(selectedSlot.Address);
             }
         }
 
-        private List<FieldSlotData> CollectRequiredSlotCandidates(int minHexDistanceFromHome)
+        private List<FieldSlotData> CollectRequiredSlotCandidates(int minHexDistanceFromHome, ISet<string> excludedSlotAddresses)
         {
             List<FieldSlotData> candidates = new List<FieldSlotData>();
 
@@ -592,7 +623,7 @@ namespace LostForest.Phase2.Runes
             {
                 FieldSlotData slot = fieldData.Slots[i];
 
-                if (slot == null || IsHomeSlot(slot))
+                if (slot == null || IsHomeSlot(slot) || (excludedSlotAddresses != null && excludedSlotAddresses.Contains(slot.Address)))
                 {
                     continue;
                 }
@@ -627,7 +658,24 @@ namespace LostForest.Phase2.Runes
 
         private char GetRandomAmbientRune(System.Random random)
         {
-            return (char)('A' + random.Next(0, AlphabetRuneCount));
+            // Required runes only exist at their assigned slots. Ambient
+            // markers remain atmospheric decoys rather than lucky alternate
+            // objective spawns near Home.
+            List<char> ambientRunes = new List<char>(AlphabetRuneCount - neededRuneSet.Count);
+
+            for (int i = 0; i < AlphabetRuneCount; i++)
+            {
+                char rune = (char)('A' + i);
+
+                if (!neededRuneSet.Contains(rune))
+                {
+                    ambientRunes.Add(rune);
+                }
+            }
+
+            return ambientRunes.Count == 0
+                ? RuneId.NoRune
+                : ambientRunes[random.Next(0, ambientRunes.Count)];
         }
 
         private bool TryGetAssignedRequiredRuneForSlot(string slotAddress, out char runeLetter)

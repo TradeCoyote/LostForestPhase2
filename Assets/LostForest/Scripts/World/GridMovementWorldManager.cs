@@ -1,5 +1,6 @@
 using LostForest.Phase2.Debugging;
 using LostForest.Phase2.Player;
+using LostForest.Phase2.Pursuer;
 using LostForest.Phase2.Runes;
 using UnityEngine;
 
@@ -20,6 +21,7 @@ namespace LostForest.Phase2.World
         [SerializeField] private GridDebugHud gridDebugHud;
         [SerializeField] private RuneManager runeManager;
         [SerializeField] private WorldEndFrostController worldEndFrostController;
+        [SerializeField] private TheHunterPursuerController theHunter;
 
         [Header("Player Spawn")]
         [SerializeField] private float footClearanceMeters = 0.18f;
@@ -35,6 +37,7 @@ namespace LostForest.Phase2.World
         public PlayerFieldTravelLog FieldTravelLog => playerFieldTravelLog;
         public RuneManager RuneManager => runeManager;
         public WorldEndFrostController WorldEndFrostController => worldEndFrostController;
+        public TheHunterPursuerController TheHunter => theHunter;
         public float OpeningViewBackwardOffsetMeters => Mathf.Max(0f, openingViewBackwardOffsetMeters);
 
         public void ApplyOpeningViewDefaults()
@@ -95,6 +98,11 @@ namespace LostForest.Phase2.World
             worldEndFrostController = newWorldEndFrostController;
         }
 
+        public void SetTheHunter(TheHunterPursuerController newTheHunter)
+        {
+            theHunter = newTheHunter;
+        }
+
         [ContextMenu("Initialize Grid Movement World")]
         public void InitializeWorld()
         {
@@ -140,6 +148,11 @@ namespace LostForest.Phase2.World
             {
                 playerGridAddressTracker.SetFieldData(FieldData, frameSettings.HexOuterRadiusMeters);
                 playerGridAddressTracker.RefreshCurrentSlot(true);
+            }
+
+            if (theHunter != null)
+            {
+                theHunter.ConfigureRun(FieldData, HomeSlot, PursuerOriginSlot);
             }
 
             ConfigureWorldEndFrost(playerCamera);
@@ -241,6 +254,16 @@ namespace LostForest.Phase2.World
             if (worldEndFrostController == null)
             {
                 worldEndFrostController = FindAnyObjectByType<WorldEndFrostController>();
+            }
+
+            if (theHunter == null)
+            {
+                theHunter = GetComponent<TheHunterPursuerController>();
+            }
+
+            if (theHunter == null)
+            {
+                theHunter = FindAnyObjectByType<TheHunterPursuerController>();
             }
 
             if (playerFieldTravelLog == null)
