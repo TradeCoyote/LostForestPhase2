@@ -59,6 +59,8 @@ namespace LostForest.Phase2.Pursuer
 
         [Header("Debug")]
         [SerializeField] private bool logProximityChanges;
+        [Tooltip("Logs actual drum playback requests and missing-audio conditions during playtests.")]
+        [SerializeField] private bool logAudioPlayback = true;
 
         private System.Random random;
         private TheHunterDrumProximity currentProximity;
@@ -77,6 +79,8 @@ namespace LostForest.Phase2.Pursuer
         private float adjacentHuntOrbitAngleDegrees;
         private float adjacentHuntTargetOrbitAngleDegrees;
         private float secondsUntilAdjacentHuntReposition;
+        private int loudDrumPlaybackCount;
+        private int huntCuePlaybackCount;
 
         private const string HuntDrumAudioObjectName = "TheHunter Hunt Drum Spatial Audio";
 
@@ -156,7 +160,8 @@ namespace LostForest.Phase2.Pursuer
             adjacentHuntOrbitMaxDegrees = 135f;
             adjacentHuntOrbitTurnDegreesPerSecond = 120f;
             deepDrumLowPassCutoffHz = 360f;
-            logProximityChanges = false;
+            logProximityChanges = true;
+            logAudioPlayback = true;
             ConfigureAudioSource();
         }
 
@@ -202,7 +207,7 @@ namespace LostForest.Phase2.Pursuer
 
         public string BuildDebugSummary()
         {
-            return $"TheHunter Drums {currentProximity} Dist={CurrentDistanceSlots} QueuedHits={queuedLoudHits}";
+            return $"TheHunter Drums {currentProximity} Dist={CurrentDistanceSlots} QueuedHits={queuedLoudHits} LoudHits={loudDrumPlaybackCount} HuntStarts={huntCuePlaybackCount}";
         }
 
         public static TheHunterDrumProximity GetProximityForDistance(int distanceSlots)
@@ -365,6 +370,16 @@ namespace LostForest.Phase2.Pursuer
             if (drumAudioSource != null && alarmClip != null)
             {
                 drumAudioSource.PlayOneShot(alarmClip, loudDrumVolume * loudAlarmGain);
+                loudDrumPlaybackCount++;
+
+                if (logAudioPlayback)
+                {
+                    Debug.Log($"Lost Forest TheHunter drum audio started: Type=Alarm, Count={loudDrumPlaybackCount}, Proximity={currentProximity}, Clip={alarmClip.name}, Volume={loudDrumVolume * loudAlarmGain:0.00}, Playing={drumAudioSource.isPlaying}", this);
+                }
+            }
+            else if (logAudioPlayback)
+            {
+                Debug.LogWarning($"Lost Forest TheHunter drum alarm did not play: AudioSource={(drumAudioSource == null ? "Missing" : "Ready")}, Clip={(alarmClip == null ? "Missing" : alarmClip.name)}.", this);
             }
         }
 
@@ -374,6 +389,11 @@ namespace LostForest.Phase2.Pursuer
 
             if (huntDrumAudioSource == null || distantHuntDrumsClip == null)
             {
+                if (logAudioPlayback)
+                {
+                    Debug.LogWarning($"Lost Forest TheHunter hunt pulse did not start: AudioSource={(huntDrumAudioSource == null ? "Missing" : "Ready")}, Clip={(distantHuntDrumsClip == null ? "Missing" : distantHuntDrumsClip.name)}.", this);
+                }
+
                 nextHuntSeconds = RollInterval(twoHexHuntIntervalSeconds);
                 return;
             }
@@ -384,6 +404,13 @@ namespace LostForest.Phase2.Pursuer
             huntDrumAudioSource.loop = true;
             huntDrumAudioSource.volume = 0f;
             huntDrumAudioSource.Play();
+            huntCuePlaybackCount++;
+
+            if (logAudioPlayback)
+            {
+                Debug.Log($"Lost Forest TheHunter drum audio started: Type=TwoHexHunt, Count={huntCuePlaybackCount}, Clip={distantHuntDrumsClip.name}, Playing={huntDrumAudioSource.isPlaying}", this);
+            }
+
             UpdateHuntCueSpatialPosition(0f);
             BeginHuntCueEnvelopePhase(HuntCueEnvelopePhase.FadeIn, RollInterval(twoHexHuntFadeInSeconds), twoHexHuntVolume);
             nextHuntSeconds = float.PositiveInfinity;
@@ -395,6 +422,11 @@ namespace LostForest.Phase2.Pursuer
 
             if (huntDrumAudioSource == null || distantHuntDrumsClip == null)
             {
+                if (logAudioPlayback)
+                {
+                    Debug.LogWarning($"Lost Forest TheHunter adjacent hunt loop did not start: AudioSource={(huntDrumAudioSource == null ? "Missing" : "Ready")}, Clip={(distantHuntDrumsClip == null ? "Missing" : distantHuntDrumsClip.name)}.", this);
+                }
+
                 return;
             }
 
@@ -404,6 +436,13 @@ namespace LostForest.Phase2.Pursuer
             huntDrumAudioSource.loop = true;
             huntDrumAudioSource.volume = 0f;
             huntDrumAudioSource.Play();
+            huntCuePlaybackCount++;
+
+            if (logAudioPlayback)
+            {
+                Debug.Log($"Lost Forest TheHunter drum audio started: Type=AdjacentHunt, Count={huntCuePlaybackCount}, Clip={distantHuntDrumsClip.name}, Playing={huntDrumAudioSource.isPlaying}", this);
+            }
+
             adjacentHuntOrbitAngleDegrees = 0f;
             adjacentHuntTargetOrbitAngleDegrees = 0f;
             secondsUntilAdjacentHuntReposition = RollInterval(adjacentHuntRepositionIntervalSeconds);

@@ -340,7 +340,7 @@ namespace LostForest.Phase2.Editor
 
             HorizontalLayoutGroup secondLineLayout = secondMessageLine.gameObject.AddComponent<HorizontalLayoutGroup>();
             secondLineLayout.childAlignment = TextAnchor.MiddleCenter;
-            secondLineLayout.spacing = 28f;
+            secondLineLayout.spacing = 84f;
             secondLineLayout.childControlWidth = true;
             secondLineLayout.childControlHeight = true;
             secondLineLayout.childForceExpandWidth = false;

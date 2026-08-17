@@ -90,6 +90,12 @@ namespace LostForest.Phase2.Pursuer
         public event Action<PursuerState, PursuerState> StateChanged;
         public event Action<string> CueRaised;
         public event Action<FieldSlotData> HiddenSlotChanged;
+        /// <summary>
+        /// Raised only when the Hunter naturally advances into its next hidden
+        /// Slot. Setup, forced state changes, and rune retreat placement do not
+        /// raise this event, so directional warning cues remain meaningful.
+        /// </summary>
+        public event Action<FieldSlotData, FieldSlotData> AdvancedToHiddenSlot;
         public event Action CaughtPlayer;
 
         public PursuerArchetype Archetype => archetype;
@@ -505,6 +511,7 @@ namespace LostForest.Phase2.Pursuer
                 hunterSlot = nextSlot;
                 moveCount++;
                 HiddenSlotChanged?.Invoke(hunterSlot);
+                AdvancedToHiddenSlot?.Invoke(previousHunterSlot, hunterSlot);
                 LogHunterMovement(previousHunterSlot, hunterSlot, "Advanced");
             }
 

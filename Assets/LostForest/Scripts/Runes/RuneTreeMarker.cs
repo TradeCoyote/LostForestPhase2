@@ -20,6 +20,7 @@ namespace LostForest.Phase2.Runes
         [SerializeField] private bool collected;
 
         public char Letter => runeId == null ? RuneId.NoRune : runeId.Letter;
+        public bool IsOwlFeather => runeId != null && runeId.IsOwlFeather;
         public string FieldSlotAddress => fieldSlotAddress;
         public string MarkerKey => markerKey;
         public bool IsAvailable => !collected && gameObject.activeInHierarchy;
@@ -35,7 +36,7 @@ namespace LostForest.Phase2.Runes
             Color letterColor,
             Camera targetCamera)
         {
-            if (anchor.TreeRoot == null || manager == null || !RuneId.IsValidRune(runeLetter))
+            if (anchor.TreeRoot == null || manager == null || !RuneId.IsValidMarkerSymbol(runeLetter))
             {
                 return null;
             }

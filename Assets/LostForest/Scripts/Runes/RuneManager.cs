@@ -9,6 +9,8 @@ namespace LostForest.Phase2.Runes
     public sealed class RuneManager : MonoBehaviour
     {
         private const int RequiredRuneTargetCount = 3;
+        private const int DefaultGuaranteedCopiesPerSelectedRune = 3;
+        private const int GuaranteedRuneMinimumSlotSeparation = 4;
         private const int AlphabetRuneCount = 26;
         private static readonly Color PrototypeRuneOrange = new Color(1f, 0.48f, 0.06f, 1f);
 
@@ -17,7 +19,13 @@ namespace LostForest.Phase2.Runes
         [SerializeField, Range(1, 8)] private int firstRequiredRuneMinSlotDistanceFromHome = 1;
         [SerializeField, Range(1, 8)] private int secondRequiredRuneMinSlotDistanceFromHome = 2;
         [SerializeField, Range(1, 8)] private int thirdRequiredRuneMinSlotDistanceFromHome = 3;
+        [Tooltip("Every selected rune is guaranteed to appear this many times across the forest. Copies are spread across the valid forest rather than concentrated near Home.")]
+        [SerializeField, Range(1, 4)] private int guaranteedCopiesPerSelectedRune = DefaultGuaranteedCopiesPerSelectedRune;
         [SerializeField] private bool logStateChanges = true;
+
+        [Header("Owl Feather")]
+        [Tooltip("Per lettered tree-marker chance to replace it with a # feather. Required letters are re-created on another tree in the same Slot.")]
+        [SerializeField, Range(0f, 0.1f)] private float owlFeatherReplacementChance = 0.025f;
 
         [Header("Scene References")]
         [SerializeField] private Transform player;
@@ -43,11 +51,12 @@ namespace LostForest.Phase2.Runes
         [SerializeField] private Color emptySocketColor = new Color(0.46f, 0.46f, 0.46f, 1f);
         [SerializeField] private Color depositedSocketColor = new Color(1f, 0.02f, 0.02f, 1f);
         [SerializeField] private Color homeNeededLetterColor = new Color(1f, 0.02f, 0.02f, 1f);
+        [SerializeField] private Color owlFeatherColor = new Color(0.78f, 0.66f, 0.43f, 1f);
 
         private readonly List<char> neededRunes = new List<char>(RequiredRuneTargetCount);
         private readonly HashSet<char> neededRuneSet = new HashSet<char>();
         private readonly HashSet<char> depositedRunes = new HashSet<char>();
-        private readonly Dictionary<char, string> requiredSlotAddressByRune = new Dictionary<char, string>();
+        private readonly Dictionary<char, List<string>> guaranteedSlotAddressesByRune = new Dictionary<char, List<string>>();
         private readonly HashSet<string> claimedMarkerKeys = new HashSet<string>();
         private readonly HashSet<RuneTreeMarker> activeMarkers = new HashSet<RuneTreeMarker>();
         private readonly HashSet<HomeRuneSocket> activeSockets = new HashSet<HomeRuneSocket>();
@@ -63,10 +72,14 @@ namespace LostForest.Phase2.Runes
 
         public event Action<char, string> RunePickedUp;
         public event Action<char, int, int> RuneDeposited;
+        public event Action<string> OwlFeatherPickedUp;
         public event Action RunCompleted;
 
         public int NeededRuneCount => neededRunes.Count;
+        public int GuaranteedCopiesPerSelectedRune => Mathf.Clamp(guaranteedCopiesPerSelectedRune, 1, 4);
+        public int GuaranteedRuneMinimumSlotSeparationHexes => GuaranteedRuneMinimumSlotSeparation;
         public int DepositedRuneCount => depositedRunes.Count;
+        public float OwlFeatherReplacementChance => Mathf.Clamp(owlFeatherReplacementChance, 0f, 0.1f);
         public bool IsRunComplete => HasDepositedEveryNeededRune();
         public bool HasCarriedRune => RuneId.IsValidRune(carriedRune);
         public char CarriedRune => carriedRune;
@@ -110,8 +123,15 @@ namespace LostForest.Phase2.Runes
         }
 
         public Color ForestLetterColor => forestLetterColor;
+        public Color OwlFeatherColor => owlFeatherColor;
         public Color HomeNeededLetterColor => homeNeededLetterColor;
         public Camera PlayerCamera => playerCamera == null ? Camera.main : playerCamera;
+
+        public bool TryGetHomeWorldCenter(out Vector3 worldCenter)
+        {
+            worldCenter = homeSlot == null ? Vector3.zero : homeSlot.WorldCenter;
+            return homeSlot != null;
+        }
 
         private void Awake()
         {
@@ -161,7 +181,7 @@ namespace LostForest.Phase2.Runes
             activeSockets.Clear();
             claimedMarkerKeys.Clear();
             depositedRunes.Clear();
-            requiredSlotAddressByRune.Clear();
+            guaranteedSlotAddressesByRune.Clear();
             neededRunes.Clear();
             neededRuneSet.Clear();
             carriedRune = RuneId.NoRune;
@@ -201,7 +221,29 @@ namespace LostForest.Phase2.Runes
 
         public bool TryGetRequiredRuneSlotAddress(char runeLetter, out string slotAddress)
         {
-            return requiredSlotAddressByRune.TryGetValue(RuneId.Normalize(runeLetter), out slotAddress);
+            return TryGetGuaranteedRuneSlotAddress(runeLetter, 0, out slotAddress);
+        }
+
+        public int GetGuaranteedRuneCopyCount(char runeLetter)
+        {
+            return guaranteedSlotAddressesByRune.TryGetValue(RuneId.Normalize(runeLetter), out List<string> slotAddresses)
+                ? slotAddresses.Count
+                : 0;
+        }
+
+        public bool TryGetGuaranteedRuneSlotAddress(char runeLetter, int copyIndex, out string slotAddress)
+        {
+            slotAddress = null;
+
+            if (!guaranteedSlotAddressesByRune.TryGetValue(RuneId.Normalize(runeLetter), out List<string> slotAddresses) ||
+                copyIndex < 0 ||
+                copyIndex >= slotAddresses.Count)
+            {
+                return false;
+            }
+
+            slotAddress = slotAddresses[copyIndex];
+            return true;
         }
 
         public int GetRequiredRuneSlotDistanceFromHome(char runeLetter)
@@ -287,11 +329,11 @@ namespace LostForest.Phase2.Runes
             EnsureMaterials();
             System.Random random = new System.Random(BuildSlotRuneSeed(fieldSlot));
             int markerCount = random.Next(1, Mathf.Min(3, treeAnchors.Count) + 1);
-            List<int> treeIndices = PickTreeIndices(random, treeAnchors.Count, markerCount);
-            List<char> markerLetters = BuildMarkerLettersForSlot(fieldSlot, random, markerCount);
+            List<char> markerSymbols = BuildMarkerSymbolsForSlot(fieldSlot, random, markerCount, treeAnchors.Count);
+            List<int> treeIndices = PickTreeIndices(random, treeAnchors.Count, markerSymbols.Count);
             int spawnedCount = 0;
 
-            for (int i = 0; i < treeIndices.Count && i < markerLetters.Count; i++)
+            for (int i = 0; i < treeIndices.Count && i < markerSymbols.Count; i++)
             {
                 RuneTreeAnchor anchor = treeAnchors[treeIndices[i]];
                 string markerKey = BuildMarkerKey(fieldSlot.Address, anchor.TreeIndex);
@@ -304,11 +346,11 @@ namespace LostForest.Phase2.Runes
                 RuneTreeMarker marker = RuneTreeMarker.CreatePrototypeMarker(
                     anchor,
                     this,
-                    markerLetters[i],
+                    markerSymbols[i],
                     fieldSlot.Address,
                     markerKey,
                     forestDiscMaterial,
-                    forestLetterColor,
+                    markerSymbols[i] == RuneId.OwlFeatherSymbol ? owlFeatherColor : forestLetterColor,
                     PlayerCamera);
 
                 if (marker != null)
@@ -334,6 +376,13 @@ namespace LostForest.Phase2.Runes
 
             PruneInactiveReferences();
 
+            RuneTreeMarker pickupMarker = FindBestPickupMarker();
+
+            if (pickupMarker != null)
+            {
+                return TryPickUpMarker(pickupMarker);
+            }
+
             if (HasCarriedRune)
             {
                 if (TryDepositCarriedRune())
@@ -341,19 +390,12 @@ namespace LostForest.Phase2.Runes
                     return true;
                 }
 
-                LogInteractionMiss($"No matching Home socket in range for carried rune {carriedRune}.");
+                LogInteractionMiss($"No Owl feather or matching Home socket in range for carried rune {carriedRune}.");
                 return false;
             }
 
-            RuneTreeMarker pickupMarker = FindBestPickupMarker();
-
-            if (pickupMarker == null)
-            {
-                LogInteractionMiss("No needed rune marker in pickup range.");
-                return false;
-            }
-
-            return TryPickUpMarker(pickupMarker);
+            LogInteractionMiss("No needed rune or Owl feather marker in pickup range.");
+            return false;
         }
 
         public bool TryGetNearestMatchingRuneSlotDebug(out string slotAddress, out char runeLetter, out float distanceMeters)
@@ -383,6 +425,20 @@ namespace LostForest.Phase2.Runes
             }
 
             char runeLetter = marker.Letter;
+
+            if (marker.IsOwlFeather)
+            {
+                claimedMarkerKeys.Add(marker.MarkerKey);
+                marker.SetCollected();
+
+                if (logStateChanges)
+                {
+                    Debug.Log($"Lost Forest Owl Feather Pickup: Slot={marker.FieldSlotAddress}, Carried={CarriedRuneDebugText}, Deposited={DepositedRunesDebugText}, ActiveMarkers={ActiveMarkerCount}", this);
+                }
+
+                OwlFeatherPickedUp?.Invoke(marker.FieldSlotAddress);
+                return true;
+            }
 
             if (HasCarriedRune || !IsRuneNeeded(runeLetter))
             {
@@ -477,7 +533,46 @@ namespace LostForest.Phase2.Runes
 
         private RuneTreeMarker FindBestPickupMarker()
         {
-            return FindNearestMatchingMarker(true);
+            Vector3 origin = GetLookOrigin();
+            Vector3 forward = GetLookForward();
+            RuneTreeMarker bestMarker = null;
+            float bestScore = float.PositiveInfinity;
+
+            foreach (RuneTreeMarker marker in activeMarkers)
+            {
+                bool isPickupCandidate = marker != null && marker.IsAvailable &&
+                    (marker.IsOwlFeather || (!HasCarriedRune && IsRuneNeeded(marker.Letter)));
+
+                if (!isPickupCandidate)
+                {
+                    continue;
+                }
+
+                float actorDistance = GetActorDistance(marker.InteractionPosition);
+
+                if (actorDistance > pickupDistanceMeters)
+                {
+                    continue;
+                }
+
+                Vector3 toMarker = marker.InteractionPosition - origin;
+                float angle = toMarker.sqrMagnitude <= 0.0001f ? 0f : Vector3.Angle(forward, toMarker.normalized);
+
+                if (requireLookForPickup && angle > pickupLookAngleDegrees)
+                {
+                    continue;
+                }
+
+                float score = (actorDistance * 0.5f) + angle;
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestMarker = marker;
+                }
+            }
+
+            return bestMarker;
         }
 
         private RuneTreeMarker FindNearestMatchingMarker(bool requireInteractionFit)
@@ -489,7 +584,7 @@ namespace LostForest.Phase2.Runes
 
             foreach (RuneTreeMarker marker in activeMarkers)
             {
-                if (marker == null || !marker.IsAvailable || !IsRuneNeeded(marker.Letter))
+                if (marker == null || !marker.IsAvailable || marker.IsOwlFeather || !IsRuneNeeded(marker.Letter))
                 {
                     continue;
                 }
@@ -593,24 +688,36 @@ namespace LostForest.Phase2.Runes
 
             for (int i = 0; i < neededRunes.Count; i++)
             {
+                char runeLetter = neededRunes[i];
                 int minimumDistance = GetRequiredRuneMinimumSlotDistanceFromHome(i);
-                List<FieldSlotData> candidates = CollectRequiredSlotCandidates(minimumDistance, assignedSlotAddresses);
+                List<string> slotAddresses = new List<string>(GuaranteedCopiesPerSelectedRune);
 
-                if (candidates.Count == 0)
+                for (int copyIndex = 0; copyIndex < GuaranteedCopiesPerSelectedRune; copyIndex++)
                 {
-                    Debug.LogWarning(
-                        $"Lost Forest Rune Run could not assign required rune {neededRunes[i]} at least {minimumDistance} rings from Home.",
-                        this);
-                    continue;
+                    List<FieldSlotData> candidates = CollectRequiredSlotCandidates(minimumDistance, int.MaxValue, assignedSlotAddresses);
+                    candidates = FilterCandidatesByGuaranteedRuneSpacing(candidates, assignedSlotAddresses);
+
+                    if (candidates.Count == 0)
+                    {
+                        Debug.LogWarning(
+                            $"Lost Forest Rune Run could not assign spaced copy {copyIndex + 1}/{GuaranteedCopiesPerSelectedRune} of rune {runeLetter} at least {minimumDistance} rings from Home.",
+                            this);
+                        continue;
+                    }
+
+                    FieldSlotData selectedSlot = candidates[random.Next(0, candidates.Count)];
+                    slotAddresses.Add(selectedSlot.Address);
+                    assignedSlotAddresses.Add(selectedSlot.Address);
                 }
 
-                FieldSlotData selectedSlot = candidates[random.Next(0, candidates.Count)];
-                requiredSlotAddressByRune[neededRunes[i]] = selectedSlot.Address;
-                assignedSlotAddresses.Add(selectedSlot.Address);
+                if (slotAddresses.Count > 0)
+                {
+                    guaranteedSlotAddressesByRune[runeLetter] = slotAddresses;
+                }
             }
         }
 
-        private List<FieldSlotData> CollectRequiredSlotCandidates(int minHexDistanceFromHome, ISet<string> excludedSlotAddresses)
+        private List<FieldSlotData> CollectRequiredSlotCandidates(int minHexDistanceFromHome, int maxHexDistanceFromHome, ISet<string> excludedSlotAddresses)
         {
             List<FieldSlotData> candidates = new List<FieldSlotData>();
 
@@ -630,7 +737,7 @@ namespace LostForest.Phase2.Runes
 
                 int distanceFromHome = homeSlot == null ? minHexDistanceFromHome : HexFrameMath.GetHexDistance(homeSlot.AxialCoordinate, slot.AxialCoordinate);
 
-                if (distanceFromHome >= minHexDistanceFromHome)
+                if (distanceFromHome >= minHexDistanceFromHome && distanceFromHome <= maxHexDistanceFromHome)
                 {
                     candidates.Add(slot);
                 }
@@ -639,50 +746,121 @@ namespace LostForest.Phase2.Runes
             return candidates;
         }
 
-        private List<char> BuildMarkerLettersForSlot(FieldSlotData fieldSlot, System.Random random, int markerCount)
+        private List<FieldSlotData> FilterCandidatesByGuaranteedRuneSpacing(
+            IReadOnlyList<FieldSlotData> candidates,
+            IEnumerable<string> assignedSlotAddresses)
         {
-            List<char> markerLetters = new List<char>(markerCount);
+            List<FieldSlotData> spacedCandidates = new List<FieldSlotData>();
+
+            if (candidates == null)
+            {
+                return spacedCandidates;
+            }
+
+            foreach (FieldSlotData candidate in candidates)
+            {
+                if (candidate == null || !IsSpacedFromGuaranteedRuneSlots(candidate, assignedSlotAddresses))
+                {
+                    continue;
+                }
+
+                spacedCandidates.Add(candidate);
+            }
+
+            return spacedCandidates;
+        }
+
+        private bool IsSpacedFromGuaranteedRuneSlots(FieldSlotData candidate, IEnumerable<string> assignedSlotAddresses)
+        {
+            if (candidate == null || assignedSlotAddresses == null)
+            {
+                return candidate != null;
+            }
+
+            foreach (string slotAddress in assignedSlotAddresses)
+            {
+                FieldSlotData assignedSlot = fieldData == null ? null : fieldData.GetSlot(slotAddress);
+
+                if (assignedSlot == null)
+                {
+                    continue;
+                }
+
+                int distance = HexFrameMath.GetHexDistance(candidate.AxialCoordinate, assignedSlot.AxialCoordinate);
+
+                if (distance < GuaranteedRuneMinimumSlotSeparation)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private List<char> BuildMarkerSymbolsForSlot(
+            FieldSlotData fieldSlot,
+            System.Random random,
+            int markerCount,
+            int availableTreeCount)
+        {
+            List<char> markerSymbols = new List<char>(markerCount);
 
             if (!IsHomeSlot(fieldSlot) && TryGetAssignedRequiredRuneForSlot(fieldSlot.Address, out char requiredRune) && IsRuneNeeded(requiredRune) && carriedRune != requiredRune)
             {
-                markerLetters.Add(requiredRune);
+                markerSymbols.Add(requiredRune);
             }
 
-            while (markerLetters.Count < markerCount)
+            while (markerSymbols.Count < markerCount)
             {
-                markerLetters.Add(GetRandomAmbientRune(random));
+                markerSymbols.Add(GetRandomAmbientRune(random));
             }
 
-            return markerLetters;
+            int originalMarkerCount = markerSymbols.Count;
+
+            for (int i = 0; i < originalMarkerCount; i++)
+            {
+                char replacedSymbol = markerSymbols[i];
+
+                if (!RuneId.IsValidRune(replacedSymbol) || (float)random.NextDouble() > OwlFeatherReplacementChance)
+                {
+                    continue;
+                }
+
+                bool isRequiredRune = IsRuneNeeded(replacedSymbol);
+
+                // A required rune may only become a feather when another tree
+                // is available to carry the displaced letter. The objective is
+                // therefore always still present in this same Slot.
+                if (isRequiredRune && markerSymbols.Count >= availableTreeCount)
+                {
+                    continue;
+                }
+
+                markerSymbols[i] = RuneId.OwlFeatherSymbol;
+
+                if (isRequiredRune)
+                {
+                    markerSymbols.Add(replacedSymbol);
+                }
+            }
+
+            return markerSymbols;
         }
 
         private char GetRandomAmbientRune(System.Random random)
         {
-            // Required runes only exist at their assigned slots. Ambient
-            // markers remain atmospheric decoys rather than lucky alternate
-            // objective spawns near Home.
-            List<char> ambientRunes = new List<char>(AlphabetRuneCount - neededRuneSet.Count);
-
-            for (int i = 0; i < AlphabetRuneCount; i++)
-            {
-                char rune = (char)('A' + i);
-
-                if (!neededRuneSet.Contains(rune))
-                {
-                    ambientRunes.Add(rune);
-                }
-            }
-
-            return ambientRunes.Count == 0
-                ? RuneId.NoRune
-                : ambientRunes[random.Next(0, ambientRunes.Count)];
+            // Every letter, including the selected objective letters, remains
+            // in the forest's normal random draw. The deliberate placements
+            // above guarantee progress; these random copies create occasional
+            // fortunate finds without filling every tree with objectives.
+            return (char)('A' + random.Next(0, AlphabetRuneCount));
         }
 
         private bool TryGetAssignedRequiredRuneForSlot(string slotAddress, out char runeLetter)
         {
-            foreach (KeyValuePair<char, string> entry in requiredSlotAddressByRune)
+            foreach (KeyValuePair<char, List<string>> entry in guaranteedSlotAddressesByRune)
             {
-                if (entry.Value == slotAddress)
+                if (entry.Value != null && entry.Value.Contains(slotAddress))
                 {
                     runeLetter = entry.Key;
                     return true;
@@ -954,7 +1132,9 @@ namespace LostForest.Phase2.Runes
             for (int i = 0; i < neededRunes.Count; i++)
             {
                 char runeLetter = neededRunes[i];
-                string slotAddress = requiredSlotAddressByRune.TryGetValue(runeLetter, out string address) ? address : "None";
+                string slotAddress = guaranteedSlotAddressesByRune.TryGetValue(runeLetter, out List<string> addresses) && addresses.Count > 0
+                    ? string.Join("/", addresses)
+                    : "None";
 
                 if (i > 0)
                 {

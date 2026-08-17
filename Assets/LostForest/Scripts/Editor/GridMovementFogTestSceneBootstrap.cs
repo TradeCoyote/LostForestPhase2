@@ -24,6 +24,8 @@ namespace LostForest.Phase2.Editor
         private const string PlayerObjectName = "Grid Movement Player";
         private const string FirstAlarmDrumClipPath = "Assets/LostForest/Assets/soundreality-taiko-drum-367656.mp3";
         private const string SecondStageHuntDrumClipPath = "Assets/LostForest/Assets/dragon-studio-tribal-drum-beat-443144.mp3";
+        private const string CrowsClipPath = "Assets/LostForest/Assets/Crows1.mp3";
+        private const string OwlClipPath = "Assets/LostForest/Assets/Owl1.mp3";
 
         [MenuItem("Lost Forest/Bootstrap/Open Grid Movement Fog Test Scene")]
         public static void OpenGridMovementFogTestScene()
@@ -80,6 +82,10 @@ namespace LostForest.Phase2.Editor
             runVictoryController.ApplyPrototypeDefaults();
             runVictoryController.SetSources(runeManager, playerCondition, firstPersonController, runeInteraction, playerCamera);
             runVictoryController.ResetVictoryState();
+            PrototypeOwlGuidanceDirector owlGuidance = GetOrAddComponent<PrototypeOwlGuidanceDirector>(worldManager.gameObject);
+            owlGuidance.ApplyPrototypeDefaults();
+            owlGuidance.SetSources(runeManager, playerObject.transform, playerCamera, playerCondition, runVictoryController);
+            owlGuidance.SetOwlClip(LoadOwlClip());
             playerFieldTravelLog.SetTracker(gridAddressTracker);
             playerTerrainMovementState.SetSources(gridAddressTracker, activeRegionRenderer);
             gridDebugHud.SetSources(gridAddressTracker, activeRegionRenderer);
@@ -97,6 +103,7 @@ namespace LostForest.Phase2.Editor
             activeRegionRenderer.ApplyHiddenBoundaryVisualDefaults();
 
             PrototypeFogDirector fogDirector = EnsurePrototypeFog();
+            PrototypeFogCeilingDirector fogCeilingDirector = EnsurePrototypeFogCeiling(playerObject.transform);
             fogDirector.ResetToNormalAndScheduleNextWhiteout();
             theHunter.ApplyTheHunterPrototypeDefaults();
             theHunter.SetSources(
@@ -111,6 +118,10 @@ namespace LostForest.Phase2.Editor
             theHunterDrums.SetSources(theHunter, playerCondition, runVictoryController);
             theHunterDrums.SetFirstAlarmDrumClip(LoadFirstAlarmDrumClip());
             theHunterDrums.SetSecondStageHuntDrumClip(LoadSecondStageHuntDrumClip());
+            TheHunterCrowCueDirector theHunterCrows = GetOrAddComponent<TheHunterCrowCueDirector>(worldManager.gameObject);
+            theHunterCrows.ApplyPrototypeDefaults();
+            theHunterCrows.SetSources(theHunter, playerObject.transform, playerCondition, runVictoryController);
+            theHunterCrows.SetCrowsClip(LoadCrowsClip());
 
             Selection.activeGameObject = playerObject;
             EditorSceneManager.MarkSceneDirty(scene);
@@ -136,9 +147,12 @@ namespace LostForest.Phase2.Editor
             WorldEndFrostController worldEndFrostController = UnityObject.FindAnyObjectByType<WorldEndFrostController>();
             PrototypeLightingDirector lightingDirector = UnityObject.FindAnyObjectByType<PrototypeLightingDirector>();
             PrototypeFogDirector fogDirector = UnityObject.FindAnyObjectByType<PrototypeFogDirector>();
+            PrototypeFogCeilingDirector fogCeilingDirector = UnityObject.FindAnyObjectByType<PrototypeFogCeilingDirector>();
+            PrototypeOwlGuidanceDirector owlGuidance = UnityObject.FindAnyObjectByType<PrototypeOwlGuidanceDirector>();
             RunVictoryController runVictoryController = UnityObject.FindAnyObjectByType<RunVictoryController>();
             TheHunterPursuerController theHunter = UnityObject.FindAnyObjectByType<TheHunterPursuerController>();
             TheHunterDrumCueDirector theHunterDrums = UnityObject.FindAnyObjectByType<TheHunterDrumCueDirector>();
+            TheHunterCrowCueDirector theHunterCrows = UnityObject.FindAnyObjectByType<TheHunterCrowCueDirector>();
 
             if (worldManager == null)
             {
@@ -195,6 +209,16 @@ namespace LostForest.Phase2.Editor
                 throw new InvalidOperationException("Grid Movement validation failed: no PrototypeFogDirector exists in the scene.");
             }
 
+            if (fogCeilingDirector == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no PrototypeFogCeilingDirector exists in the scene.");
+            }
+
+            if (owlGuidance == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no PrototypeOwlGuidanceDirector exists in the scene.");
+            }
+
             if (runVictoryController == null)
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no RunVictoryController exists in the scene.");
@@ -208,6 +232,11 @@ namespace LostForest.Phase2.Editor
             if (theHunterDrums == null)
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no TheHunterDrumCueDirector exists in the scene.");
+            }
+
+            if (theHunterCrows == null)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: no TheHunterCrowCueDirector exists in the scene.");
             }
 
             worldManager.InitializeWorld();
@@ -269,14 +298,17 @@ namespace LostForest.Phase2.Editor
             ValidateConditionEconomy(playerCondition);
             ValidateWorldEndFrostPrototype(worldManager, activeRegionRenderer, playerCondition, worldEndFrostController);
             ValidateRunePrototype(worldManager, activeRegionRenderer, runeManager);
+            ValidateOwlGuidancePrototype(owlGuidance);
             ValidateTheHunterPrototype(worldManager, theHunter, playerCondition, fogDirector);
             ValidateTheHunterDrumPrototype(theHunterDrums);
+            ValidateTheHunterCrowPrototype(theHunterCrows);
             ValidateVictoryPrototype(runeManager, runVictoryController);
             ValidatePrototypeLighting(lightingDirector);
             ValidatePrototypeFog(fogDirector);
+            ValidatePrototypeFogCeiling(fogCeilingDirector);
             ValidateTerrainExtremesAndHiddenBoundary(activeRegionRenderer);
 
-            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:+0.0;-0.0;0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Hunter={theHunter.BuildDebugSummary()}, Drums={theHunterDrums.BuildDebugSummary()}, Victory={runVictoryController.BuildDebugSummary()}, Lighting={lightingDirector.BuildDebugSummary()}, Fog={fogDirector.BuildDebugSummary()}, ExtremeSpots={activeRegionRenderer.ExtremeHeightSpotFraction * 100f:0.0}% x{activeRegionRenderer.ExtremeHeightMultiplier:0.00}, HiddenBoundary={activeRegionRenderer.BoundaryVisualsMatchPlayableForest}");
+            Debug.Log($"Lost Forest Grid Movement validation passed: Field={worldManager.FieldData.Rows}x{worldManager.FieldData.Columns}, Home={worldManager.HomeSlot.Address}, ActiveSlots={activeRegionRenderer.ActiveRenderedSlotCount}, FrostRings={activeRegionRenderer.OuterFrostRenderRings}, CurrentGridAddress={gridAddressTracker.CurrentGridAddress}, TravelSteps={playerFieldTravelLog.StepCount}, Stamina={playerCondition.Stamina:0}/{playerCondition.EffectiveMaxStamina:0}, Chill={playerCondition.Chill:0}, ConditionSpeedMultiplier={playerCondition.ConditionSpeedMultiplier:0.00}, Frozen={playerCondition.IsFrozen}, GameOver={playerCondition.IsGameOver}, MovementSlope={playerTerrainMovementState.CurrentSlopeDegrees:0.0}deg, MovementGrade={playerTerrainMovementState.SignedMovementGradeDegrees:+0.0;-0.0;0.0}deg, TerrainSpeedMultiplier={playerTerrainMovementState.SpeedMultiplier:0.00}, NeededRunes={runeManager.NeededRunesDebugText}, Deposited={runeManager.DepositedRunesDebugText}, ActiveRuneMarkers={runeManager.ActiveMarkerCount}, Hunter={theHunter.BuildDebugSummary()}, Drums={theHunterDrums.BuildDebugSummary()}, Crows={theHunterCrows.BuildDebugSummary()}, Owl={owlGuidance.BuildDebugSummary()}, Victory={runVictoryController.BuildDebugSummary()}, Lighting={lightingDirector.BuildDebugSummary()}, Fog={fogDirector.BuildDebugSummary()}, Ceiling={fogCeilingDirector.BuildDebugSummary()}, ExtremeSpots={activeRegionRenderer.ExtremeHeightSpotFraction * 100f:0.0}% x{activeRegionRenderer.ExtremeHeightMultiplier:0.00}, HiddenBoundary={activeRegionRenderer.BoundaryVisualsMatchPlayableForest}");
         }
 
         private static GridMovementWorldManager EnsureWorldManager(
@@ -385,6 +417,22 @@ namespace LostForest.Phase2.Editor
             fogDirector.ResetToNormalAndScheduleNextWhiteout();
             fogDirector.ApplyFogSettings();
             return fogDirector;
+        }
+
+        private static PrototypeFogCeilingDirector EnsurePrototypeFogCeiling(Transform playerTransform)
+        {
+            PrototypeFogCeilingDirector fogCeilingDirector = UnityObject.FindAnyObjectByType<PrototypeFogCeilingDirector>();
+
+            if (fogCeilingDirector == null)
+            {
+                GameObject fogCeilingObject = new GameObject("Prototype Wavering Fog Ceiling Director");
+                fogCeilingDirector = fogCeilingObject.AddComponent<PrototypeFogCeilingDirector>();
+            }
+
+            fogCeilingDirector.gameObject.name = "Prototype Wavering Fog Ceiling Director";
+            fogCeilingDirector.ApplyPrototypeDefaults();
+            fogCeilingDirector.SetPlayer(playerTransform);
+            return fogCeilingDirector;
         }
 
         private static Transform EnsurePlayerCamera(Transform playerTransform)
@@ -594,12 +642,24 @@ namespace LostForest.Phase2.Editor
 
         private static void ValidateRunePrototype(GridMovementWorldManager worldManager, ActiveRegionRenderer activeRegionRenderer, RuneManager runeManager)
         {
+            if (Mathf.Abs(runeManager.OwlFeatherReplacementChance - 0.025f) > 0.0001f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: Owl feather replacement chance must be 2.5%, got {runeManager.OwlFeatherReplacementChance * 100f:0.00}%.");
+            }
+
             if (runeManager.NeededRuneCount != 3)
             {
                 throw new InvalidOperationException($"Grid Movement validation failed: expected 3 needed runes, got {runeManager.NeededRuneCount}.");
             }
 
+            if (runeManager.GuaranteedCopiesPerSelectedRune != 3)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: expected 3 guaranteed copies per selected rune, got {runeManager.GuaranteedCopiesPerSelectedRune}.");
+            }
+
             HashSet<char> distinctRunes = new HashSet<char>();
+            HashSet<string> allGuaranteedSlotAddresses = new HashSet<string>();
+            List<FieldSlotData> allGuaranteedSlots = new List<FieldSlotData>();
 
             for (int i = 0; i < runeManager.NeededRuneCount; i++)
             {
@@ -633,6 +693,48 @@ namespace LostForest.Phase2.Editor
                 {
                     throw new InvalidOperationException($"Grid Movement validation failed: needed rune {runeLetter} at index {i} should be at least {minimumDistanceFromHome} rings from Home, got distance {distanceFromHome}.");
                 }
+
+                if (runeManager.GetGuaranteedRuneCopyCount(runeLetter) != runeManager.GuaranteedCopiesPerSelectedRune)
+                {
+                    throw new InvalidOperationException($"Grid Movement validation failed: needed rune {runeLetter} should have {runeManager.GuaranteedCopiesPerSelectedRune} guaranteed copies, got {runeManager.GetGuaranteedRuneCopyCount(runeLetter)}.");
+                }
+
+                for (int copyIndex = 0; copyIndex < runeManager.GuaranteedCopiesPerSelectedRune; copyIndex++)
+                {
+                    if (!runeManager.TryGetGuaranteedRuneSlotAddress(runeLetter, copyIndex, out string copySlotAddress))
+                    {
+                        throw new InvalidOperationException($"Grid Movement validation failed: needed rune {runeLetter} is missing guaranteed copy {copyIndex + 1}.");
+                    }
+
+                    if (copySlotAddress == worldManager.HomeSlot.Address)
+                    {
+                        throw new InvalidOperationException($"Grid Movement validation failed: needed rune {runeLetter} copy {copyIndex + 1} was placed on the Home Slot.");
+                    }
+
+                    if (!allGuaranteedSlotAddresses.Add(copySlotAddress))
+                    {
+                        throw new InvalidOperationException($"Grid Movement validation failed: guaranteed rune copy slot {copySlotAddress} was assigned more than once.");
+                    }
+
+                    FieldSlotData copySlot = worldManager.FieldData.GetSlot(copySlotAddress);
+
+                    if (copySlot == null)
+                    {
+                        throw new InvalidOperationException($"Grid Movement validation failed: guaranteed rune copy slot {copySlotAddress} was not found in the Field.");
+                    }
+
+                    for (int assignedIndex = 0; assignedIndex < allGuaranteedSlots.Count; assignedIndex++)
+                    {
+                        int separation = HexFrameMath.GetHexDistance(copySlot.AxialCoordinate, allGuaranteedSlots[assignedIndex].AxialCoordinate);
+
+                        if (separation < runeManager.GuaranteedRuneMinimumSlotSeparationHexes)
+                        {
+                            throw new InvalidOperationException($"Grid Movement validation failed: guaranteed rune copy slot {copySlotAddress} is only {separation} rings from {allGuaranteedSlots[assignedIndex].Address}; the minimum is {runeManager.GuaranteedRuneMinimumSlotSeparationHexes}.");
+                        }
+                    }
+
+                    allGuaranteedSlots.Add(copySlot);
+                }
             }
 
             HomeRuneSocket[] sockets = UnityObject.FindObjectsByType<HomeRuneSocket>();
@@ -665,32 +767,35 @@ namespace LostForest.Phase2.Editor
             for (int i = 0; i < runeManager.NeededRuneCount; i++)
             {
                 char runeLetter = runeManager.GetNeededRuneAt(i);
-                runeManager.TryGetRequiredRuneSlotAddress(runeLetter, out string slotAddress);
-                FieldSlotData requiredSlot = worldManager.FieldData.GetSlot(slotAddress);
-
-                if (requiredSlot == null)
+                for (int copyIndex = 0; copyIndex < runeManager.GuaranteedCopiesPerSelectedRune; copyIndex++)
                 {
-                    throw new InvalidOperationException($"Grid Movement validation failed: guaranteed slot {slotAddress} for needed rune {runeLetter} was not found in the Field.");
-                }
+                    runeManager.TryGetGuaranteedRuneSlotAddress(runeLetter, copyIndex, out string slotAddress);
+                    FieldSlotData requiredSlot = worldManager.FieldData.GetSlot(slotAddress);
 
-                activeRegionRenderer.RenderAround(requiredSlot);
-                RuneTreeMarker[] markers = UnityObject.FindObjectsByType<RuneTreeMarker>();
-                bool foundRequiredMarker = false;
-
-                for (int markerIndex = 0; markerIndex < markers.Length; markerIndex++)
-                {
-                    RuneTreeMarker marker = markers[markerIndex];
-
-                    if (marker != null && marker.Letter == runeLetter && marker.FieldSlotAddress == slotAddress)
+                    if (requiredSlot == null)
                     {
-                        foundRequiredMarker = true;
-                        break;
+                        throw new InvalidOperationException($"Grid Movement validation failed: guaranteed copy {copyIndex + 1} slot {slotAddress} for needed rune {runeLetter} was not found in the Field.");
                     }
-                }
 
-                if (!foundRequiredMarker)
-                {
-                    throw new InvalidOperationException($"Grid Movement validation failed: rendering guaranteed slot {slotAddress} did not create needed rune marker {runeLetter}.");
+                    activeRegionRenderer.RenderAround(requiredSlot);
+                    RuneTreeMarker[] markers = UnityObject.FindObjectsByType<RuneTreeMarker>();
+                    bool foundRequiredMarker = false;
+
+                    for (int markerIndex = 0; markerIndex < markers.Length; markerIndex++)
+                    {
+                        RuneTreeMarker marker = markers[markerIndex];
+
+                        if (marker != null && marker.Letter == runeLetter && marker.FieldSlotAddress == slotAddress)
+                        {
+                            foundRequiredMarker = true;
+                            break;
+                        }
+                    }
+
+                    if (!foundRequiredMarker)
+                    {
+                        throw new InvalidOperationException($"Grid Movement validation failed: rendering guaranteed copy {copyIndex + 1} slot {slotAddress} did not create needed rune marker {runeLetter}.");
+                    }
                 }
             }
 
@@ -700,6 +805,28 @@ namespace LostForest.Phase2.Editor
             {
                 throw new InvalidOperationException("Grid Movement validation failed: no active tree rune markers were spawned.");
             }
+        }
+
+        private static void ValidateOwlGuidancePrototype(PrototypeOwlGuidanceDirector owlGuidance)
+        {
+            if (!owlGuidance.ValidateConfiguration(out string failureReason))
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: {failureReason}");
+            }
+
+            if (!owlGuidance.HasOwlClip)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: Owl guidance is not assigned from {OwlClipPath}.");
+            }
+
+            Vector2 owlLeadDuration = owlGuidance.LeadHomeVisibleDurationRangeSeconds;
+
+            if (Mathf.Abs(owlLeadDuration.x - 5f) > 0.001f || Mathf.Abs(owlLeadDuration.y - 7f) > 0.001f)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: Owl guidance should fade 5-7 seconds after turning toward Home, got {owlLeadDuration.x:0.0}-{owlLeadDuration.y:0.0}s.");
+            }
+
+            Debug.Log($"Lost Forest Owl guidance validation passed: {owlGuidance.BuildDebugSummary()}");
         }
 
         private static void ValidateTheHunterPrototype(
@@ -798,6 +925,32 @@ namespace LostForest.Phase2.Editor
             Debug.Log($"Lost Forest TheHunter drum validation passed: {theHunterDrums.BuildDebugSummary()}");
         }
 
+        private static void ValidateTheHunterCrowPrototype(TheHunterCrowCueDirector theHunterCrows)
+        {
+            if (!theHunterCrows.ValidateConfiguration(out string failureReason))
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: {failureReason}");
+            }
+
+            if (!theHunterCrows.HasCrowsClip)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: Hunter crow cue is not assigned from {CrowsClipPath}.");
+            }
+
+            if (theHunterCrows.FlockCountRange.x != 10 || theHunterCrows.FlockCountRange.y != 20 ||
+                theHunterCrows.AudioLayerCountRange.x != 5 || theHunterCrows.AudioLayerCountRange.y != 6)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: Hunter crow flock or layered-audio ranges are incorrect.");
+            }
+
+            if (!theHunterCrows.RandomizeTriggerRollsEachRun)
+            {
+                throw new InvalidOperationException("Grid Movement validation failed: Hunter crow trigger rolls must be reseeded for every playthrough.");
+            }
+
+            Debug.Log($"Lost Forest TheHunter crow validation passed: {theHunterCrows.BuildDebugSummary()}");
+        }
+
         private static AudioClip LoadFirstAlarmDrumClip()
         {
             AudioClip firstAlarmDrumClip = AssetDatabase.LoadAssetAtPath<AudioClip>(FirstAlarmDrumClipPath);
@@ -820,6 +973,30 @@ namespace LostForest.Phase2.Editor
             }
 
             return secondStageHuntDrumClip;
+        }
+
+        private static AudioClip LoadCrowsClip()
+        {
+            AudioClip crowsClip = AssetDatabase.LoadAssetAtPath<AudioClip>(CrowsClipPath);
+
+            if (crowsClip == null)
+            {
+                throw new InvalidOperationException($"Lost Forest could not load the Hunter crow cue at {CrowsClipPath}.");
+            }
+
+            return crowsClip;
+        }
+
+        private static AudioClip LoadOwlClip()
+        {
+            AudioClip owlClip = AssetDatabase.LoadAssetAtPath<AudioClip>(OwlClipPath);
+
+            if (owlClip == null)
+            {
+                throw new InvalidOperationException($"Lost Forest could not load the Owl guidance cue at {OwlClipPath}.");
+            }
+
+            return owlClip;
         }
 
         private static void ValidateVictoryPrototype(RuneManager runeManager, RunVictoryController runVictoryController)
@@ -1038,6 +1215,26 @@ namespace LostForest.Phase2.Editor
 
             Debug.Log($"Lost Forest Fog validation passed: WaveringViews={observedGlimpseCount}/{expectedGlimpseCount}, PeakVisibility={strongestVisibilityReturn * 100f:0.0}%. {fogDirector.BuildDebugSummary()}");
             fogDirector.ResetToNormalAndScheduleNextWhiteout();
+        }
+
+        private static void ValidatePrototypeFogCeiling(PrototypeFogCeilingDirector fogCeilingDirector)
+        {
+            if (!fogCeilingDirector.ValidateConfiguration(out string failureReason))
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: {failureReason}");
+            }
+
+            fogCeilingDirector.TickForValidation(5f);
+
+            if (fogCeilingDirector.CurrentCeilingHeightAbovePlayerMeters < fogCeilingDirector.MinimumCeilingHeightMeters ||
+                fogCeilingDirector.CurrentCeilingHeightAbovePlayerMeters > fogCeilingDirector.MaximumCeilingHeightMeters ||
+                fogCeilingDirector.CurrentVisibilityFraction < fogCeilingDirector.ThickestVisibilityFraction ||
+                fogCeilingDirector.CurrentVisibilityFraction > fogCeilingDirector.ThinnestVisibilityFraction)
+            {
+                throw new InvalidOperationException($"Grid Movement validation failed: fog-ceiling sample escaped its canopy or visibility range. {fogCeilingDirector.BuildDebugSummary()}");
+            }
+
+            Debug.Log($"Lost Forest fog-ceiling validation passed: {fogCeilingDirector.BuildDebugSummary()}");
         }
 
         private static void ValidateTerrainExtremesAndHiddenBoundary(ActiveRegionRenderer activeRegionRenderer)

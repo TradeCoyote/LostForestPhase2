@@ -15,7 +15,7 @@ namespace LostForest.Phase2.UI
         private static readonly Dictionary<char, RuneStroke[]> Glyphs = new Dictionary<char, RuneStroke[]>
         {
             ['A'] = Strokes(0f, -0.5f, 0.36f, 0.5f, 0.36f, 0.5f, 0.72f, -0.5f, 0.15f, -0.08f, 0.57f, -0.08f),
-            ['B'] = Strokes(0f, 0.5f, 0f, -0.5f, 0f, 0.5f, 0.62f, 0.23f, 0.62f, 0.23f, 0f, 0f, 0f, 0.62f, -0.24f, 0.62f, -0.24f, 0f, -0.5f),
+            ['B'] = Strokes(0f, 0.5f, 0f, -0.5f, 0f, 0.5f, 0.62f, 0.24f, 0.62f, 0.24f, 0f, 0.02f, 0f, 0.02f, 0.62f, -0.24f, 0.62f, -0.24f, 0f, -0.5f),
             ['D'] = Strokes(0f, 0.5f, 0f, -0.5f, 0f, 0.5f, 0.68f, 0f, 0.68f, 0f, 0f, -0.5f),
             ['E'] = Strokes(0.68f, 0.5f, 0f, 0f, 0f, 0f, 0.68f, -0.5f, 0f, 0f, 0.56f, 0f),
             ['F'] = Strokes(0f, -0.5f, 0f, 0.5f, 0f, 0.5f, 0.68f, 0.5f, 0f, 0f, 0.56f, 0f),
